@@ -37,7 +37,7 @@ export function AttentionPanel({ tasks }: { tasks: DerivedTask[] }) {
           <div className="empty-state">No operational flags in the current filter set.</div>
         ) : (
           flagged
-            .sort((a, b) => b.attentionFlags.length - a.attentionFlags.length || b.modifiedAt.localeCompare(a.modifiedAt))
+            .sort((a, b) => b.attentionSignals.length - a.attentionSignals.length || b.modifiedAt.localeCompare(a.modifiedAt))
             .map((task) => <TaskRow key={task.id} task={task} />)
         )}
       </div>

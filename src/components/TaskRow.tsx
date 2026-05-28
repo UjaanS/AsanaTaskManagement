@@ -44,7 +44,7 @@ export function TaskRow({ task, draggable = false, onDragStart, onDropTask }: Ta
 
       {task.attentionFlags.length > 0 && (
         <div className="flag-line">
-          {task.attentionFlags.map((flag) => <FlagBadge key={flag} flag={flag} />)}
+          {task.attentionSignals.map((signal) => <FlagBadge key={signal.flag} signal={signal} />)}
         </div>
       )}
 
@@ -69,6 +69,17 @@ export function TaskRow({ task, draggable = false, onDragStart, onDropTask }: Ta
               </div>
             ))}
           </div>
+          {task.attentionSignals.length > 0 && (
+            <div className="signal-panel">
+              {task.attentionSignals.map((signal) => (
+                <div className={`signal-card severity-${signal.severity}`} key={signal.flag}>
+                  <strong>{signal.reason}</strong>
+                  <span>{signal.action}</span>
+                  <em>{signal.source}{signal.ageDays !== undefined ? ` | ${signal.ageDays}d` : ""}</em>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
     </article>

@@ -1,6 +1,5 @@
-import { phaseLabels } from "../lib/theme";
 import type { AttentionFlag, DerivedTask, Filters, PhaseKey } from "../types/ops";
-import { flagLabels } from "../lib/theme";
+import { flagLabels, phaseLabels } from "../lib/theme";
 import { uniqueValues } from "../lib/ops";
 
 interface FilterBarProps {

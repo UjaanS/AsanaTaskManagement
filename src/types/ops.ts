@@ -11,7 +11,7 @@ export type PhaseKey =
 
 export type Priority = "Critical" | "High" | "Medium" | "Low";
 export type EtaStatus = "ok" | "due_today" | "overdue" | "missing";
-export type ViewKey = "assignee" | "timeline" | "attention";
+export type ViewKey = "assignee" | "timeline" | "attention" | "settings";
 export type TimelineGroupKey = "assignee" | "project";
 export type RangePreset = "week" | "previous_week" | "month" | "previous_month" | "custom";
 
@@ -23,6 +23,18 @@ export type AttentionFlag =
   | "missing_status"
   | "high_priority_stale"
   | "eta_violation";
+
+export type AttentionSeverity = "critical" | "high" | "medium" | "low";
+export type AttentionSource = "eta" | "status" | "ownership" | "qa" | "activity" | "comment";
+
+export interface AttentionSignal {
+  flag: AttentionFlag;
+  severity: AttentionSeverity;
+  reason: string;
+  source: AttentionSource;
+  action: string;
+  ageDays?: number;
+}
 
 export interface OpsComment {
   id: string;
@@ -51,8 +63,11 @@ export interface QAEvent {
 export interface OpsTask {
   id: string;
   title: string;
+  asanaUrl?: string;
   project: string;
+  projectGid?: string;
   assignee: string | null;
+  assigneeGid?: string | null;
   createdAt: string;
   modifiedAt: string;
   assignmentDate: string;
@@ -61,6 +76,7 @@ export interface OpsTask {
   phase: PhaseKey;
   priority: Priority;
   requestType: string;
+  qaState?: string | null;
   eta: string | null;
   dueDate?: string | null;
   completedAt?: string | null;
@@ -79,7 +95,46 @@ export interface DerivedTask extends OpsTask {
   qaReworkCount: number;
   currentPhase: PhaseKey;
   attentionFlags: AttentionFlag[];
+  attentionSignals: AttentionSignal[];
   includedByDefault: boolean;
+}
+
+export interface OpsDataSource {
+  listTasks(): Promise<OpsTask[]>;
+}
+
+export interface ConnectionStatus {
+  connected: boolean;
+  workspaceGid: string | null;
+  updatedAt: string | null;
+}
+
+export interface OpsSummary {
+  completedToday: number;
+  overdue: number;
+  newBlockers: number;
+  highRiskProjects: number;
+  recentActivity: Array<{ id: string; type: string; title: string; createdAt: string }>;
+}
+
+export interface ProjectHealth {
+  id: string;
+  name: string;
+  completionPct: number;
+  overdueCount: number;
+  blockerCount: number;
+  riskScore: number;
+  healthStatus: string;
+  nextDeadline: string | null;
+}
+
+export interface UserWorkload {
+  name: string;
+  active: number;
+  overdue: number;
+  blocked: number;
+  stale: number;
+  completion: number;
 }
 
 export interface Filters {
