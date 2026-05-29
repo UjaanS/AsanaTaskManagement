@@ -5,7 +5,7 @@ import { AsanaApiError } from "./asana/client";
 import { AsanaConfigError, loadAsanaConfig } from "./asana/config";
 import { buildAsanaDiagnostics } from "./asana/diagnostics";
 import { fetchOpsTasks } from "./asana/service";
-import { handleAuthPat, handleHealth, handleOpsTasks, type ApiResult } from "./apiHandlers";
+import { handleAuthPat, handleHealth, handleOpsTasks, handlePing, type ApiResult } from "./apiHandlers";
 import { loadDotEnv } from "./env";
 import { getSummary, listProjectHealth, listTaskDtos, listUserWorkloads, persistOpsTasks } from "./persistence/tasks";
 import { runSync } from "./sync";
@@ -26,6 +26,11 @@ export function startServer(port = defaultPort, host = defaultHost) {
 
       if (request.method === "GET" && url.pathname === "/api/health") {
         sendApiResult(response, handleHealth());
+        return;
+      }
+
+      if (request.method === "GET" && url.pathname === "/api/ping") {
+        sendApiResult(response, handlePing());
         return;
       }
 

@@ -15,6 +15,10 @@ export function handleHealth(): ApiResult {
   return { status: 200, body: { ok: true } };
 }
 
+export function handlePing(): ApiResult {
+  return { status: 200, body: { ok: true } };
+}
+
 export async function handleAuthPat(input: {
   method: string;
   cookieHeader?: string | string[];
