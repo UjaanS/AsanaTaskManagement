@@ -1,15 +1,13 @@
 import http from "node:http";
 import { readFile } from "node:fs/promises";
 import { extname, join, normalize } from "node:path";
-import crypto from "node:crypto";
-import { AsanaApiError, validateAccessToken } from "./asana/client";
-import { AsanaConfigError, loadAsanaConfig, normalizeConfiguredValue } from "./asana/config";
+import { AsanaApiError } from "./asana/client";
+import { AsanaConfigError, loadAsanaConfig } from "./asana/config";
 import { buildAsanaDiagnostics } from "./asana/diagnostics";
 import { fetchOpsTasks } from "./asana/service";
-import { getDb } from "./db";
+import { handleAuthPat, handleHealth, handleOpsTasks, type ApiResult } from "./apiHandlers";
 import { loadDotEnv } from "./env";
-import { getLastSyncAt, getSummary, listPersistedOpsTasks, listProjectHealth, listTaskDtos, listUserWorkloads, persistOpsTasks } from "./persistence/tasks";
-import { encryptSecret, requireAppSecret } from "./security";
+import { getSummary, listProjectHealth, listTaskDtos, listUserWorkloads, persistOpsTasks } from "./persistence/tasks";
 import { runSync } from "./sync";
 
 const defaultPort = Number(process.env.PORT ?? 8787);
@@ -27,13 +25,12 @@ export function startServer(port = defaultPort, host = defaultHost) {
       }
 
       if (request.method === "GET" && url.pathname === "/api/health") {
-        sendJson(response, 200, { ok: true, lastSyncAt: await getLastSyncAt() });
+        sendApiResult(response, handleHealth());
         return;
       }
 
       if (request.method === "GET" && url.pathname === "/api/ops/tasks") {
-        const tasks = await listPersistedOpsTasks();
-        sendJson(response, 200, { tasks });
+        sendApiResult(response, await handleOpsTasks({ method: request.method, cookieHeader: request.headers.cookie }));
         return;
       }
 
@@ -66,46 +63,13 @@ export function startServer(port = defaultPort, host = defaultHost) {
       }
 
       if (request.method === "GET" && url.pathname === "/api/auth/pat") {
-        const config = getDb()
-          .prepare("SELECT pat_valid, workspace_gid, updated_at FROM integration_config ORDER BY updated_at DESC LIMIT 1")
-          .get() as { pat_valid?: number; workspace_gid?: string | null; updated_at?: string | null } | undefined;
-        sendJson(response, 200, {
-          ok: true,
-          data: {
-            connected: Boolean(config?.pat_valid) || Boolean(normalizeConfiguredValue(process.env.ASANA_ACCESS_TOKEN)),
-            workspaceGid: normalizeConfiguredValue(config?.workspace_gid) ?? normalizeConfiguredValue(process.env.ASANA_WORKSPACE_GID) ?? null,
-            updatedAt: config?.updated_at ?? null,
-          },
-        });
+        sendApiResult(response, await handleAuthPat({ method: request.method, cookieHeader: request.headers.cookie }));
         return;
       }
 
-      if (request.method === "POST" && url.pathname === "/api/auth/pat") {
-        const body = await readJsonBody<{ pat?: string; workspaceGid?: string }>(request);
-        const pat = body.pat?.trim() ?? "";
-        if (pat.length < 10) {
-          sendJson(response, 400, { ok: false, error: "Asana PAT is required." });
-          return;
-        }
-
-        await validateAccessToken(pat);
-        const existing = getDb()
-          .prepare("SELECT id, workspace_gid FROM integration_config ORDER BY updated_at DESC LIMIT 1")
-          .get() as { id: string; workspace_gid?: string | null } | undefined;
-        const patCipherText = encryptSecret(pat, requireAppSecret());
-        const workspaceGid = normalizeConfiguredValue(body.workspaceGid) ?? normalizeConfiguredValue(existing?.workspace_gid) ?? normalizeConfiguredValue(process.env.ASANA_WORKSPACE_GID) ?? null;
-        const now = new Date().toISOString();
-        const id = existing?.id ?? crypto.randomUUID();
-        if (existing) {
-          getDb()
-            .prepare("UPDATE integration_config SET pat_cipher_text = ?, pat_valid = 1, workspace_gid = ?, updated_at = ? WHERE id = ?")
-            .run(patCipherText, workspaceGid, now, id);
-        } else {
-          getDb()
-            .prepare("INSERT INTO integration_config (id, pat_cipher_text, pat_valid, workspace_gid, created_at, updated_at) VALUES (?, ?, 1, ?, ?, ?)")
-            .run(id, patCipherText, workspaceGid, now, now);
-        }
-        sendJson(response, 200, { ok: true, data: { id, patValid: true } });
+      if ((request.method === "POST" || request.method === "DELETE") && url.pathname === "/api/auth/pat") {
+        const body = request.method === "POST" ? await readJsonBody<{ pat?: string; workspaceGid?: string }>(request) : undefined;
+        sendApiResult(response, await handleAuthPat({ method: request.method, cookieHeader: request.headers.cookie, body }));
         return;
       }
 
@@ -174,6 +138,17 @@ function sendJson(response: http.ServerResponse, status: number, payload: unknow
     "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
   });
   response.end(payload === null ? "" : JSON.stringify(payload));
+}
+
+function sendApiResult(response: http.ServerResponse, result: ApiResult) {
+  response.writeHead(result.status, {
+    "Content-Type": "application/json",
+    "Access-Control-Allow-Origin": process.env.CORS_ORIGIN ?? "http://127.0.0.1:5173",
+    "Access-Control-Allow-Headers": "Content-Type",
+    "Access-Control-Allow-Methods": "GET,POST,DELETE,OPTIONS",
+    ...(result.headers ?? {}),
+  });
+  response.end(JSON.stringify(result.body));
 }
 
 async function readJsonBody<T>(request: http.IncomingMessage): Promise<T> {
