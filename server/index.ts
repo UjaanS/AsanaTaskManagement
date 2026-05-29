@@ -3,7 +3,7 @@ import { readFile } from "node:fs/promises";
 import { extname, join, normalize } from "node:path";
 import crypto from "node:crypto";
 import { AsanaApiError, validateAccessToken } from "./asana/client";
-import { AsanaConfigError, loadAsanaConfig } from "./asana/config";
+import { AsanaConfigError, loadAsanaConfig, normalizeConfiguredValue } from "./asana/config";
 import { buildAsanaDiagnostics } from "./asana/diagnostics";
 import { fetchOpsTasks } from "./asana/service";
 import { getDb } from "./db";
@@ -71,8 +71,8 @@ export function startServer(port = defaultPort) {
         sendJson(response, 200, {
           ok: true,
           data: {
-            connected: Boolean(config?.pat_valid) || Boolean(process.env.ASANA_ACCESS_TOKEN),
-            workspaceGid: config?.workspace_gid ?? process.env.ASANA_WORKSPACE_GID ?? null,
+            connected: Boolean(config?.pat_valid) || Boolean(normalizeConfiguredValue(process.env.ASANA_ACCESS_TOKEN)),
+            workspaceGid: normalizeConfiguredValue(config?.workspace_gid) ?? normalizeConfiguredValue(process.env.ASANA_WORKSPACE_GID) ?? null,
             updatedAt: config?.updated_at ?? null,
           },
         });
@@ -92,7 +92,7 @@ export function startServer(port = defaultPort) {
           .prepare("SELECT id, workspace_gid FROM integration_config ORDER BY updated_at DESC LIMIT 1")
           .get() as { id: string; workspace_gid?: string | null } | undefined;
         const patCipherText = encryptSecret(pat, requireAppSecret());
-        const workspaceGid = body.workspaceGid?.trim() || existing?.workspace_gid || process.env.ASANA_WORKSPACE_GID || null;
+        const workspaceGid = normalizeConfiguredValue(body.workspaceGid) ?? normalizeConfiguredValue(existing?.workspace_gid) ?? normalizeConfiguredValue(process.env.ASANA_WORKSPACE_GID) ?? null;
         const now = new Date().toISOString();
         const id = existing?.id ?? crypto.randomUUID();
         if (existing) {

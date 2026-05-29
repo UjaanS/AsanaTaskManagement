@@ -13,7 +13,7 @@ interface SettingsPanelProps {
 
 export function SettingsPanel({ status, isSyncing, statusMessage, onClose, onSaveConnection, onRunSync }: SettingsPanelProps) {
   const [pat, setPat] = useState("");
-  const [workspaceGid, setWorkspaceGid] = useState(status?.workspaceGid ?? "");
+  const [workspaceGid, setWorkspaceGid] = useState(displayWorkspace(status?.workspaceGid));
   const [isSaving, setIsSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
@@ -56,7 +56,7 @@ export function SettingsPanel({ status, isSyncing, statusMessage, onClose, onSav
         </div>
 
         <div className="settings-status-grid">
-          <StatusItem label="Workspace GID" value={status?.workspaceGid ?? "Not set"} />
+          <StatusItem label="Workspace GID" value={displayWorkspace(status?.workspaceGid) || "Auto-detect on sync"} />
           <StatusItem label="Last Updated" value={status?.updatedAt ? new Date(status.updatedAt).toLocaleString() : "Never"} />
           <StatusItem label="Sync State" value={isSyncing ? "Syncing" : statusMessage ?? "Idle"} />
         </div>
@@ -80,6 +80,11 @@ export function SettingsPanel({ status, isSyncing, statusMessage, onClose, onSav
       </section>
     </div>
   );
+}
+
+function displayWorkspace(value: string | null | undefined) {
+  if (!value || value.includes("replace-with")) return "";
+  return value;
 }
 
 function StatusItem({ label, value }: { label: string; value: string }) {

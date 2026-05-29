@@ -77,6 +77,15 @@ export async function validateAccessToken(accessToken: string): Promise<void> {
   await asanaGet<{ data: { gid: string; name: string } }>("/users/me", { accessToken, projectGids: [], syncLookbackDays: 30, fieldMap: {}, projectNames: {}, statusToPhase: {} });
 }
 
+export async function fetchWorkspaces(config: AsanaServerConfig): Promise<AsanaProject[]> {
+  const json = await asanaGet<{ data: AsanaProject[] }>(`/workspaces?opt_fields=${encodeURIComponent(projectFields)}`, config);
+  return json.data ?? [];
+}
+
+export async function fetchWorkspaceProjects(workspaceGid: string, config: AsanaServerConfig): Promise<AsanaProject[]> {
+  return fetchAll<AsanaProject>(`/projects?workspace=${workspaceGid}&limit=100&opt_fields=${encodeURIComponent(projectFields)}`, config);
+}
+
 export async function fetchProjectTaskSample(projectGid: string, config: AsanaServerConfig, limit = 10): Promise<AsanaTask[]> {
   const json = await asanaGet<{ data: AsanaTask[] }>(`/projects/${projectGid}/tasks?limit=${limit}&opt_fields=${encodeURIComponent(taskFields)}`, config);
   return json.data ?? [];

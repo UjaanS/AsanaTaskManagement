@@ -96,8 +96,8 @@ export function readAsanaEnv(env: NodeJS.ProcessEnv = process.env): AsanaEnvSnap
   const statusOverrides = parseJsonObject<Record<string, PhaseKey>>(env.ASANA_STATUS_TO_PHASE_JSON, {}, "ASANA_STATUS_TO_PHASE_JSON", warnings);
 
   return {
-    accessTokenPresent: Boolean(env.ASANA_ACCESS_TOKEN),
-    workspaceGid: env.ASANA_WORKSPACE_GID,
+    accessTokenPresent: Boolean(normalizeConfiguredValue(env.ASANA_ACCESS_TOKEN)),
+    workspaceGid: normalizeConfiguredValue(env.ASANA_WORKSPACE_GID),
     projectGids: parseCsv(env.ASANA_PROJECT_GIDS),
     syncLookbackDays: parsePositiveInt(env.ASANA_SYNC_LOOKBACK_DAYS, 30),
     fieldMap,
@@ -114,7 +114,16 @@ function parseCsv(value: string | undefined): string[] {
   return (value ?? "")
     .split(",")
     .map((item) => item.trim())
+    .filter((item) => Boolean(normalizeConfiguredValue(item)))
     .filter(Boolean);
+}
+
+export function normalizeConfiguredValue(value: string | null | undefined): string | undefined {
+  const trimmed = value?.trim();
+  if (!trimmed) return undefined;
+  if (/^(replace|your|project_gid|workspace_gid|asana_token|token_here)/i.test(trimmed)) return undefined;
+  if (trimmed.includes("replace-with")) return undefined;
+  return trimmed;
 }
 
 function parsePositiveInt(value: string | undefined, fallback: number): number {

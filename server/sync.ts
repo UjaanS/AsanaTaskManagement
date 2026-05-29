@@ -1,5 +1,6 @@
 import type { AsanaServerConfig } from "./asana/config";
-import { AsanaConfigError, readAsanaEnv } from "./asana/config";
+import { AsanaConfigError, normalizeConfiguredValue, readAsanaEnv } from "./asana/config";
+import { fetchWorkspaceProjects, fetchWorkspaces } from "./asana/client";
 import { fetchOpsTasks } from "./asana/service";
 import { getDb } from "./db";
 import { persistOpsTasks } from "./persistence/tasks";
@@ -40,21 +41,48 @@ export async function loadPersistentAsanaConfig(env: NodeJS.ProcessEnv = process
     throw new AsanaConfigError("Missing Asana PAT. Save one in Settings or set ASANA_ACCESS_TOKEN server-side in .env.");
   }
 
-  if (snapshot.projectGids.length === 0) {
-    throw new AsanaConfigError("Missing ASANA_PROJECT_GIDS. Provide one or more comma-separated Asana project GIDs.");
-  }
-
   if (snapshot.warnings.length > 0) {
     throw new AsanaConfigError(snapshot.warnings[0]);
   }
 
-  return {
+  const baseConfig: AsanaServerConfig = {
     accessToken,
-    workspaceGid: integrationConfig?.workspace_gid ?? snapshot.workspaceGid,
+    workspaceGid: normalizeConfiguredValue(integrationConfig?.workspace_gid) ?? snapshot.workspaceGid,
     projectGids: snapshot.projectGids,
     syncLookbackDays: snapshot.syncLookbackDays,
     fieldMap: snapshot.fieldMap,
     projectNames: snapshot.projectNames,
     statusToPhase: snapshot.statusToPhase,
   };
+
+  const workspaceGid = baseConfig.workspaceGid ?? (await fetchWorkspaces(baseConfig))[0]?.gid;
+  if (!workspaceGid) {
+    throw new AsanaConfigError("No Asana workspace is available for this PAT.");
+  }
+
+  const discoveredProjects = baseConfig.projectGids.length === 0 ? await fetchWorkspaceProjects(workspaceGid, baseConfig) : [];
+  const projectGids = baseConfig.projectGids.length > 0 ? baseConfig.projectGids : discoveredProjects.map((project) => project.gid);
+  if (projectGids.length === 0) {
+    throw new AsanaConfigError("No Asana projects are available in the connected workspace.");
+  }
+
+  const projectNames = {
+    ...Object.fromEntries(discoveredProjects.map((project) => [project.gid, project.name ?? project.gid])),
+    ...snapshot.projectNames,
+  };
+
+  rememberWorkspace(workspaceGid);
+
+  return {
+    ...baseConfig,
+    workspaceGid,
+    projectGids,
+    projectNames,
+  };
+}
+
+function rememberWorkspace(workspaceGid: string) {
+  const row = getDb().prepare("SELECT id FROM integration_config ORDER BY updated_at DESC LIMIT 1").get() as { id: string } | undefined;
+  if (!row) return;
+  getDb().prepare("UPDATE integration_config SET workspace_gid = ?, updated_at = ? WHERE id = ?").run(workspaceGid, new Date().toISOString(), row.id);
 }
