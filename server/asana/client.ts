@@ -62,7 +62,7 @@ export class AsanaApiError extends Error {
   }
 
   get safeMessage(): string {
-    if (this.status === 401 || this.status === 403) return "Asana authentication failed. Check ASANA_ACCESS_TOKEN permissions.";
+    if (this.status === 401 || this.status === 403) return "Asana authentication failed. Confirm the PAT was copied completely, has not expired or been revoked, and belongs to an account with access to this workspace.";
     if (this.status === 404) return "Asana resource not found. Check ASANA_PROJECT_GIDS and workspace access.";
     if (this.status === 429) return "Asana rate limit reached. Wait briefly, then retry.";
     return `Asana API request failed with status ${this.status}.`;

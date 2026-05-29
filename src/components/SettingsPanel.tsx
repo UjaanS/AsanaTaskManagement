@@ -6,11 +6,12 @@ interface SettingsPanelProps {
   status: ConnectionStatus | null;
   isSyncing: boolean;
   statusMessage: string | null;
+  onClose: () => void;
   onSaveConnection: (pat: string, workspaceGid: string) => Promise<void>;
   onRunSync: () => Promise<void>;
 }
 
-export function SettingsPanel({ status, isSyncing, statusMessage, onSaveConnection, onRunSync }: SettingsPanelProps) {
+export function SettingsPanel({ status, isSyncing, statusMessage, onClose, onSaveConnection, onRunSync }: SettingsPanelProps) {
   const [pat, setPat] = useState("");
   const [workspaceGid, setWorkspaceGid] = useState(status?.workspaceGid ?? "");
   const [isSaving, setIsSaving] = useState(false);
@@ -21,7 +22,7 @@ export function SettingsPanel({ status, isSyncing, statusMessage, onSaveConnecti
     setMessage(null);
     setIsSaving(true);
     try {
-      await onSaveConnection(pat, workspaceGid);
+      await onSaveConnection(pat.trim(), workspaceGid);
       setPat("");
       setMessage("Asana connection saved.");
     } catch (error) {
@@ -41,14 +42,17 @@ export function SettingsPanel({ status, isSyncing, statusMessage, onSaveConnecti
   }
 
   return (
-    <section className="settings-layout">
-      <div className="settings-card">
+    <div className="modal-backdrop" role="presentation" onMouseDown={onClose}>
+      <section className="settings-modal modal" role="dialog" aria-modal="true" aria-labelledby="settings-title" onMouseDown={(event) => event.stopPropagation()}>
         <div className="panel-header">
           <div>
-            <h2>Asana Connection</h2>
+            <h2 id="settings-title">Asana Connection</h2>
             <span>Server-side PAT storage and sync status</span>
           </div>
-          <strong className={status?.connected ? "status-good" : "status-warn"}>{status?.connected ? "CONNECTED" : "NOT CONNECTED"}</strong>
+          <div className="settings-header-actions">
+            <strong className={status?.connected ? "status-good" : "status-warn"}>{status?.connected ? "CONNECTED" : "NOT CONNECTED"}</strong>
+            <button className="button" type="button" onClick={onClose}>Close</button>
+          </div>
         </div>
 
         <div className="settings-status-grid">
@@ -73,8 +77,8 @@ export function SettingsPanel({ status, isSyncing, statusMessage, onSaveConnecti
         </form>
 
         {(message || statusMessage) && <div className="settings-message">{message ?? statusMessage}</div>}
-      </div>
-    </section>
+      </section>
+    </div>
   );
 }
 

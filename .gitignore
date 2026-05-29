@@ -6,3 +6,6 @@ vite.config.d.ts
 .env
 .env.*
 !.env.example
+dev.db
+dev.db-*
+*.db-journal

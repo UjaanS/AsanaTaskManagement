@@ -81,16 +81,17 @@ export function startServer(port = defaultPort) {
 
       if (request.method === "POST" && url.pathname === "/api/auth/pat") {
         const body = await readJsonBody<{ pat?: string; workspaceGid?: string }>(request);
-        if (!body.pat || body.pat.length < 10) {
+        const pat = body.pat?.trim() ?? "";
+        if (pat.length < 10) {
           sendJson(response, 400, { ok: false, error: "Asana PAT is required." });
           return;
         }
 
-        await validateAccessToken(body.pat);
+        await validateAccessToken(pat);
         const existing = getDb()
           .prepare("SELECT id, workspace_gid FROM integration_config ORDER BY updated_at DESC LIMIT 1")
           .get() as { id: string; workspace_gid?: string | null } | undefined;
-        const patCipherText = encryptSecret(body.pat, requireAppSecret());
+        const patCipherText = encryptSecret(pat, requireAppSecret());
         const workspaceGid = body.workspaceGid?.trim() || existing?.workspace_gid || process.env.ASANA_WORKSPACE_GID || null;
         const now = new Date().toISOString();
         const id = existing?.id ?? crypto.randomUUID();

@@ -11,7 +11,7 @@ export type PhaseKey =
 
 export type Priority = "Critical" | "High" | "Medium" | "Low";
 export type EtaStatus = "ok" | "due_today" | "overdue" | "missing";
-export type ViewKey = "assignee" | "timeline" | "attention" | "settings";
+export type ViewKey = "assignee" | "timeline" | "attention";
 export type TimelineGroupKey = "assignee" | "project";
 export type RangePreset = "week" | "previous_week" | "month" | "previous_month" | "custom";
 

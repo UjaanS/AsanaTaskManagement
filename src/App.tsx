@@ -36,6 +36,7 @@ export default function App() {
   const [showOld, setShowOld] = useState(false);
   const [filters, setFilters] = useState<Filters>(initialFilters);
   const [showEod, setShowEod] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
   const [order, setOrder] = useState<Record<string, number>>({});
   const [tasks, setTasks] = useState<OpsTask[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -118,7 +119,6 @@ export default function App() {
           <Tab active={view === "assignee"} onClick={() => setView("assignee")}>Assignees</Tab>
           <Tab active={view === "timeline"} onClick={() => setView("timeline")}>Timeline</Tab>
           <Tab active={view === "attention"} onClick={() => setView("attention")}>Attention</Tab>
-          <Tab active={view === "settings"} onClick={() => setView("settings")}>Settings</Tab>
         </nav>
 
         <div className="topbar-stats">
@@ -127,36 +127,26 @@ export default function App() {
 
         <div className="topbar-actions">
           <button className="button" type="button" disabled={isSyncing} onClick={() => void handleRunSync()}>{isSyncing ? "Syncing" : "Sync"}</button>
+          <button className="button" type="button" onClick={() => setShowSettings(true)}>Settings</button>
           <button className="button" type="button" onClick={() => setIsDark((value) => !value)}>{isDark ? "Light" : "Dark"}</button>
           <button className="button button-accent" type="button" onClick={() => setShowEod(true)}>EOD Report</button>
         </div>
       </header>
 
       <main className="workspace">
-        {view !== "settings" && (
-          <FilterBar
-            tasks={derivedTasks}
-            filters={filters}
-            showOld={showOld}
-            onFiltersChange={setFilters}
-            onShowOldChange={setShowOld}
-          />
-        )}
+        <FilterBar
+          tasks={derivedTasks}
+          filters={filters}
+          showOld={showOld}
+          onFiltersChange={setFilters}
+          onShowOldChange={setShowOld}
+        />
 
         <div className="content-shell">
-          {view !== "settings" && <OpsSnapshot summary={summary} projects={projects} workloads={workloads} />}
-          {view === "settings" && (
-            <SettingsPanel
-              status={connectionStatus}
-              isSyncing={isSyncing}
-              statusMessage={syncMessage}
-              onSaveConnection={handleSaveConnection}
-              onRunSync={handleRunSync}
-            />
-          )}
-          {view !== "settings" && isLoading && <div className="empty-state">Loading operational task snapshots...</div>}
-          {view !== "settings" && loadError && <div className="empty-state error-state">{loadError}</div>}
-          {view !== "settings" && !isLoading && !loadError && filteredTasks.length === 0 && (
+          <OpsSnapshot summary={summary} projects={projects} workloads={workloads} />
+          {isLoading && <div className="empty-state">Loading operational task snapshots...</div>}
+          {loadError && <div className="empty-state error-state">{loadError}</div>}
+          {!isLoading && !loadError && filteredTasks.length === 0 && (
             <div className="empty-state">No tasks match the current filters. Clear filters or enable Show Old.</div>
           )}
           {!isLoading && !loadError && filteredTasks.length > 0 && view === "assignee" && (
@@ -172,6 +162,16 @@ export default function App() {
       </footer>
 
       {showEod && <EODModal tasks={filteredTasks} onClose={() => setShowEod(false)} />}
+      {showSettings && (
+        <SettingsPanel
+          status={connectionStatus}
+          isSyncing={isSyncing}
+          statusMessage={syncMessage}
+          onClose={() => setShowSettings(false)}
+          onSaveConnection={handleSaveConnection}
+          onRunSync={handleRunSync}
+        />
+      )}
     </div>
   );
 }

@@ -739,7 +739,7 @@ select {
 .snapshot-card,
 .snapshot-wide,
 .snapshot-activity,
-.settings-card {
+.settings-modal {
   background: var(--panel);
   border: 1px solid var(--border);
   border-radius: 8px;
@@ -780,13 +780,9 @@ select {
   white-space: nowrap;
 }
 
-.settings-layout {
-  display: grid;
-  grid-template-columns: minmax(0, 760px);
-}
-
-.settings-card {
+.settings-modal {
   overflow: hidden;
+  width: min(760px, 100%);
 }
 
 .panel-header {
@@ -878,6 +874,12 @@ select {
   color: var(--muted);
   font-size: 11px;
   padding: 12px 16px;
+}
+
+.settings-header-actions {
+  align-items: center;
+  display: flex;
+  gap: 8px;
 }
 
 .timeline-view {
