@@ -79,6 +79,35 @@ npm run preview
 
 Open `http://127.0.0.1:8787`. This is different from Vite's default preview server because AOCC needs the server-side Asana API available at `/api/ops/tasks`.
 
+## Deploy
+
+Deploy AOCC as a Node web service, not as a static-only Vite site. The same Node process must serve both `dist/` and `/api/*`.
+
+Recommended deployment settings:
+
+```bash
+Build command: npm install && npm run build
+Start command: npm start
+```
+
+Required environment variables:
+
+```bash
+APP_SECRET=replace-with-a-long-random-secret
+DATABASE_URL=file:./dev.db
+```
+
+Optional environment variables:
+
+```bash
+ASANA_ACCESS_TOKEN=replace-with-server-side-token
+ASANA_WORKSPACE_GID=workspace_gid
+ASANA_PROJECT_GIDS=project_gid_1,project_gid_2
+CORS_ORIGIN=https://your-deployed-domain.example
+```
+
+If you deploy to a static host such as a plain Vite/Netlify static export, `/api/auth/pat` will return 404 because the custom Node server is not running. Use a Node-capable host such as Render, Railway, Fly.io, or another service that can run `npm start`. For production persistence, attach a persistent disk for `dev.db` or replace SQLite with a managed database.
+
 ## Verify
 
 ```bash

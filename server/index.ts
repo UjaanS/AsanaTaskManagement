@@ -13,9 +13,10 @@ import { encryptSecret, requireAppSecret } from "./security";
 import { runSync } from "./sync";
 
 const defaultPort = Number(process.env.PORT ?? 8787);
+const defaultHost = process.env.HOST ?? (process.env.NODE_ENV === "production" ? "0.0.0.0" : "127.0.0.1");
 loadDotEnv();
 
-export function startServer(port = defaultPort) {
+export function startServer(port = defaultPort, host = defaultHost) {
   const server = http.createServer(async (request, response) => {
     try {
       const url = new URL(request.url ?? "/", `http://${request.headers.host ?? "localhost"}`);
@@ -133,8 +134,8 @@ export function startServer(port = defaultPort) {
     }
   });
 
-  server.listen(port, "127.0.0.1", () => {
-    console.log(`AOCC API listening on http://127.0.0.1:${port}`);
+  server.listen(port, host, () => {
+    console.log(`AOCC API listening on http://${host}:${port}`);
   });
 
   return server;
@@ -168,7 +169,7 @@ function toSafeError(error: unknown): { status: number; message: string; logMess
 function sendJson(response: http.ServerResponse, status: number, payload: unknown) {
   response.writeHead(status, {
     "Content-Type": "application/json",
-    "Access-Control-Allow-Origin": "http://127.0.0.1:5173",
+    "Access-Control-Allow-Origin": process.env.CORS_ORIGIN ?? "*",
     "Access-Control-Allow-Headers": "Content-Type",
     "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
   });
