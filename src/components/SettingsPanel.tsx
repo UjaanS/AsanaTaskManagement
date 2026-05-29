@@ -8,10 +8,11 @@ interface SettingsPanelProps {
   statusMessage: string | null;
   onClose: () => void;
   onSaveConnection: (pat: string, workspaceGid: string) => Promise<void>;
+  onClearConnection: () => Promise<void>;
   onRunSync: () => Promise<void>;
 }
 
-export function SettingsPanel({ status, isSyncing, statusMessage, onClose, onSaveConnection, onRunSync }: SettingsPanelProps) {
+export function SettingsPanel({ status, isSyncing, statusMessage, onClose, onSaveConnection, onClearConnection, onRunSync }: SettingsPanelProps) {
   const [pat, setPat] = useState("");
   const [workspaceGid, setWorkspaceGid] = useState(displayWorkspace(status?.workspaceGid));
   const [isSaving, setIsSaving] = useState(false);
@@ -41,13 +42,24 @@ export function SettingsPanel({ status, isSyncing, statusMessage, onClose, onSav
     }
   }
 
+  async function handleLogout() {
+    setMessage(null);
+    try {
+      await onClearConnection();
+      setPat("");
+      setMessage("Asana session cleared.");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Unable to clear Asana session.");
+    }
+  }
+
   return (
     <div className="modal-backdrop" role="presentation" onMouseDown={onClose}>
       <section className="settings-modal modal" role="dialog" aria-modal="true" aria-labelledby="settings-title" onMouseDown={(event) => event.stopPropagation()}>
         <div className="panel-header">
           <div>
             <h2 id="settings-title">Asana Connection</h2>
-            <span>Server-side PAT storage and sync status</span>
+            <span>Encrypted browser session and sync status</span>
           </div>
           <div className="settings-header-actions">
             <strong className={status?.connected ? "status-good" : "status-warn"}>{status?.connected ? "CONNECTED" : "NOT CONNECTED"}</strong>
@@ -73,6 +85,7 @@ export function SettingsPanel({ status, isSyncing, statusMessage, onClose, onSav
           <div className="settings-actions">
             <button className="button button-accent" disabled={isSaving} type="submit">{isSaving ? "Saving..." : "Save & Validate PAT"}</button>
             <button className="button" disabled={!status?.connected || isSyncing} onClick={handleSync} type="button">{isSyncing ? "Syncing..." : "Run Sync Now"}</button>
+            <button className="button" disabled={!status?.connected} onClick={handleLogout} type="button">Logout</button>
           </div>
         </form>
 

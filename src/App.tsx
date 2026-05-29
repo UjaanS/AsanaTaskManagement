@@ -8,16 +8,14 @@ import { SettingsPanel } from "./components/SettingsPanel";
 import { StatsBar } from "./components/StatsBar";
 import { TimelineView } from "./components/TimelineView";
 import {
+  clearConnection,
   getConnectionStatus,
-  getOpsSummary,
-  getProjectHealth,
-  getUserWorkloads,
   opsDataSource,
   runSync,
   saveConnection,
 } from "./data/opsDataSource";
 import { applyFilters, deriveTasks } from "./lib/ops";
-import type { ConnectionStatus, Filters, OpsSummary, OpsTask, ProjectHealth, UserWorkload, ViewKey } from "./types/ops";
+import type { ConnectionStatus, DerivedTask, Filters, OpsSummary, OpsTask, ProjectHealth, UserWorkload, ViewKey } from "./types/ops";
 
 const initialFilters: Filters = {
   assignee: "",
@@ -42,9 +40,6 @@ export default function App() {
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus | null>(null);
-  const [summary, setSummary] = useState<OpsSummary | null>(null);
-  const [projects, setProjects] = useState<ProjectHealth[]>([]);
-  const [workloads, setWorkloads] = useState<UserWorkload[]>([]);
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
 
@@ -60,16 +55,8 @@ export default function App() {
       setIsLoading(false);
     }
 
-    const settled = await Promise.allSettled([
-      getConnectionStatus(),
-      getOpsSummary(),
-      getProjectHealth(),
-      getUserWorkloads(),
-    ]);
+    const settled = await Promise.allSettled([getConnectionStatus()]);
     if (settled[0].status === "fulfilled") setConnectionStatus(settled[0].value);
-    if (settled[1].status === "fulfilled") setSummary(settled[1].value);
-    if (settled[2].status === "fulfilled") setProjects(settled[2].value);
-    if (settled[3].status === "fulfilled") setWorkloads(settled[3].value);
   }, []);
 
   useEffect(() => {
@@ -85,6 +72,14 @@ export default function App() {
   async function handleSaveConnection(pat: string, workspaceGid: string) {
     await saveConnection(pat, workspaceGid);
     setConnectionStatus(await getConnectionStatus());
+    await loadDashboard();
+  }
+
+  async function handleClearConnection() {
+    await clearConnection();
+    setConnectionStatus(await getConnectionStatus());
+    setTasks([]);
+    setSyncMessage("Asana session cleared.");
   }
 
   async function handleRunSync() {
@@ -105,6 +100,7 @@ export default function App() {
 
   const derivedTasks = useMemo(() => deriveTasks(tasks), [tasks]);
   const filteredTasks = useMemo(() => applyFilters(derivedTasks, filters, showOld), [derivedTasks, filters, showOld]);
+  const snapshot = useMemo(() => buildSnapshot(derivedTasks), [derivedTasks]);
 
   return (
     <div className={`app ${isDark ? "theme-dark" : "theme-light"}`}>
@@ -143,7 +139,7 @@ export default function App() {
         />
 
         <div className="content-shell">
-          <OpsSnapshot summary={summary} projects={projects} workloads={workloads} />
+          <OpsSnapshot summary={snapshot.summary} projects={snapshot.projects} workloads={snapshot.workloads} />
           {isLoading && <div className="empty-state">Loading operational task snapshots...</div>}
           {loadError && <div className="empty-state error-state">{loadError}</div>}
           {!isLoading && !loadError && filteredTasks.length === 0 && (
@@ -169,11 +165,71 @@ export default function App() {
           statusMessage={syncMessage}
           onClose={() => setShowSettings(false)}
           onSaveConnection={handleSaveConnection}
+          onClearConnection={handleClearConnection}
           onRunSync={handleRunSync}
         />
       )}
     </div>
   );
+}
+
+function buildSnapshot(tasks: DerivedTask[]): { summary: OpsSummary; projects: ProjectHealth[]; workloads: UserWorkload[] } {
+  const today = new Date().toISOString().slice(0, 10);
+  const projectMap = new Map<string, DerivedTask[]>();
+  const assigneeMap = new Map<string, DerivedTask[]>();
+
+  tasks.forEach((task) => {
+    projectMap.set(task.project, [...(projectMap.get(task.project) ?? []), task]);
+    const assignee = task.assignee ?? "Unassigned";
+    assigneeMap.set(assignee, [...(assigneeMap.get(assignee) ?? []), task]);
+  });
+
+  const projects = [...projectMap.entries()].map(([name, projectTasks]) => {
+    const active = projectTasks.filter((task) => !task.completedAt);
+    const completed = projectTasks.length - active.length;
+    const overdueCount = active.filter((task) => task.etaStatus === "overdue").length;
+    const blockerCount = active.filter((task) => task.currentPhase === "ON_HOLD").length;
+    const riskScore = overdueCount * 35 + blockerCount * 30 + active.filter((task) => task.attentionSignals.length > 0).length * 10;
+    return {
+      id: name,
+      name,
+      completionPct: projectTasks.length === 0 ? 0 : Number(((completed / projectTasks.length) * 100).toFixed(1)),
+      overdueCount,
+      blockerCount,
+      riskScore,
+      healthStatus: riskScore >= 60 ? "red" : riskScore >= 35 ? "yellow" : "green",
+      nextDeadline: active.map((task) => task.eta ?? task.dueDate).filter(Boolean).sort()[0] ?? null,
+    };
+  });
+
+  const workloads = [...assigneeMap.entries()].map(([name, assigneeTasks]) => {
+    const active = assigneeTasks.filter((task) => !task.completedAt);
+    return {
+      name,
+      active: active.length,
+      overdue: active.filter((task) => task.etaStatus === "overdue").length,
+      blocked: active.filter((task) => task.currentPhase === "ON_HOLD").length,
+      stale: active.filter((task) => task.staleDays > 0).length,
+      completion: assigneeTasks.length === 0 ? 0 : Number((((assigneeTasks.length - active.length) / assigneeTasks.length) * 100).toFixed(1)),
+    };
+  });
+
+  return {
+    summary: {
+      completedToday: tasks.filter((task) => task.completedAt === today).length,
+      overdue: tasks.filter((task) => task.etaStatus === "overdue").length,
+      newBlockers: tasks.filter((task) => task.currentPhase === "ON_HOLD").length,
+      highRiskProjects: projects.filter((project) => project.healthStatus === "red").length,
+      recentActivity: tasks.slice(0, 8).map((task) => ({
+        id: task.id,
+        type: task.currentPhase,
+        title: task.title,
+        createdAt: task.modifiedAt,
+      })),
+    },
+    projects,
+    workloads,
+  };
 }
 
 function Tab({ active, onClick, children }: { active: boolean; onClick: () => void; children: string }) {
