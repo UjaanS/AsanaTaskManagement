@@ -11,7 +11,7 @@
     "dev:api": "tsx server/cli.ts",
     "build": "tsc --noEmit && vite build",
     "preview": "tsx server/preview.ts",
-    "start": "tsx server/cli.ts",
+    "start": "tsx server/preview.ts",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev --name init",
     "test": "vitest run"
@@ -20,6 +20,7 @@
     "@vitejs/plugin-react": "^5.0.4",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
+    "tsx": "^4.22.3",
     "typescript": "^5.9.3",
     "vite": "^7.1.12"
   },
@@ -27,7 +28,6 @@
     "@types/node": "^25.9.1",
     "@types/react": "^19.2.2",
     "@types/react-dom": "^19.2.2",
-    "tsx": "^4.22.3",
     "vitest": "^4.1.7"
   }
 }
