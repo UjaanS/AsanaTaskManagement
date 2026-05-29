@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { addDays, daysBetween, formatLong, formatShort, isWeekend, todayISO, toDate } from "../lib/date";
-import { getRange, groupTasks, sortTasks } from "../lib/ops";
+import { getRange, groupTasks, isDateInRange, sortTasks } from "../lib/ops";
 import { phaseClass, phaseLabels } from "../lib/theme";
 import type { DerivedTask, RangePreset, TimelineGroupKey } from "../types/ops";
 
@@ -18,6 +18,7 @@ export function TimelineView({ tasks }: { tasks: DerivedTask[] }) {
   const groupNames = Object.keys(groups).sort((a, b) => a.localeCompare(b));
   const headerRef = useRef<HTMLDivElement>(null);
   const bodyRef = useRef<HTMLDivElement>(null);
+  const labelRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const todayOffset = daysBetween(range.start, today);
@@ -25,7 +26,9 @@ export function TimelineView({ tasks }: { tasks: DerivedTask[] }) {
   }, [range.start, today]);
 
   const syncHeader = () => {
-    if (headerRef.current && bodyRef.current) headerRef.current.scrollLeft = bodyRef.current.scrollLeft;
+    if (!bodyRef.current) return;
+    if (headerRef.current) headerRef.current.scrollLeft = bodyRef.current.scrollLeft;
+    if (labelRef.current) labelRef.current.scrollTop = bodyRef.current.scrollTop;
   };
 
   return (
@@ -68,7 +71,7 @@ export function TimelineView({ tasks }: { tasks: DerivedTask[] }) {
           </div>
         </div>
 
-        <div className="timeline-left timeline-rows">
+        <div className="timeline-left timeline-rows" ref={labelRef}>
           {groupNames.map((group) => (
             <div key={group}>
               <div className="timeline-group-row">{group}<span>{groups[group].length}</span></div>
@@ -114,7 +117,7 @@ export function TimelineView({ tasks }: { tasks: DerivedTask[] }) {
                         </div>
                       );
                     })}
-                    {task.eta && (
+                    {task.eta && isDateInRange(task.eta, range.start, range.totalDays) && (
                       <div className={`eta-marker ${task.etaStatus === "overdue" ? "missed" : ""}`} style={{ left: daysBetween(range.start, task.eta) * dayWidth + dayWidth / 2 }} title={`ETA ${formatShort(task.eta)}`} />
                     )}
                   </div>

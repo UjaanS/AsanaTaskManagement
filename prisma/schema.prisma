@@ -1,0 +1,108 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model IntegrationConfig {
+  id            String   @id @default(cuid())
+  patCipherText String?
+  patValid      Boolean  @default(false)
+  workspaceGid  String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model User {
+  id        String   @id @default(cuid())
+  asanaGid  String   @unique
+  name      String
+  email     String?
+  team      String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  tasks     Task[]
+}
+
+model Project {
+  id        String                  @id @default(cuid())
+  asanaGid  String                  @unique
+  name      String
+  ownerName String?
+  dueDate   DateTime?
+  createdAt DateTime                @default(now())
+  updatedAt DateTime                @updatedAt
+  tasks     Task[]
+  health    ProjectHealthSnapshot[]
+}
+
+model Task {
+  id          String      @id @default(cuid())
+  asanaGid    String      @unique
+  title       String
+  status      String
+  phase       String
+  priority    String
+  requestType String
+  dueDate     DateTime?
+  eta         DateTime?
+  completed   Boolean     @default(false)
+  blocked     Boolean     @default(false)
+  tags        String
+  opsJson     String
+  lastUpdated DateTime
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  assigneeId  String?
+  projectId   String?
+  assignee    User?       @relation(fields: [assigneeId], references: [id])
+  project     Project?    @relation(fields: [projectId], references: [id])
+  events      TaskEvent[]
+
+  @@index([dueDate, completed])
+  @@index([assigneeId])
+  @@index([projectId])
+  @@index([lastUpdated])
+  @@index([blocked])
+  @@index([priority])
+  @@index([phase])
+}
+
+model TaskEvent {
+  id        String   @id @default(cuid())
+  taskId    String
+  type      String
+  payload   String
+  createdAt DateTime @default(now())
+  task      Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@index([createdAt])
+  @@index([type])
+}
+
+model SyncRun {
+  id           String    @id @default(cuid())
+  status       String
+  startedAt    DateTime  @default(now())
+  finishedAt   DateTime?
+  durationMs   Int?
+  errorMessage String?
+}
+
+model ProjectHealthSnapshot {
+  id            String   @id @default(cuid())
+  projectId     String
+  completionPct Float
+  overdueCount  Int
+  blockerCount  Int
+  riskScore     Float
+  healthStatus  String
+  createdAt     DateTime @default(now())
+  project       Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@index([createdAt])
+  @@index([projectId])
+}
