@@ -7,12 +7,10 @@ export function applyFilters(tasks: DerivedTask[], filters: Filters, showOld: bo
     if (!showOld && !task.includedByDefault) return false;
     if (filters.assignee && (task.assignee ?? "Unassigned") !== filters.assignee) return false;
     if (filters.project && task.project !== filters.project) return false;
-    if (filters.priority && task.priority !== filters.priority) return false;
     if (filters.phase && task.currentPhase !== filters.phase) return false;
-    if (filters.requestType && task.requestType !== filters.requestType) return false;
     if (filters.flag && !task.attentionFlags.includes(filters.flag as AttentionFlag)) return false;
     if (query) {
-      const haystack = [task.id, task.title, task.project, task.assignee ?? "Unassigned", task.status ?? "", task.latestComment?.body ?? ""]
+      const haystack = [task.title, task.project, task.assignee ?? "Unassigned", task.status ?? "", task.latestComment?.body ?? ""]
         .join(" ")
         .toLowerCase();
       if (!haystack.includes(query)) return false;

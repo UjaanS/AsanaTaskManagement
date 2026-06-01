@@ -1,7 +1,13 @@
 import crypto from "node:crypto";
 
-type PhaseKey = "TODO" | "DEV" | "QA" | "QA_PASSED" | "QA_FAILED" | "ER" | "DONE" | "ON_HOLD" | "LIVE";
+// PhaseKey is the verbatim Asana status string; this Vercel function does not abstract.
+type PhaseKey = string;
 type Priority = "Critical" | "High" | "Medium" | "Low";
+
+const QA_STATUSES = new Set(["ready for qa", "in qa"]);
+const LIVE_STATUSES = new Set(["live on demo"]);
+const COMPLETED_PHASE: PhaseKey = "Completed";
+const FALLBACK_PHASE: PhaseKey = "New/ To do";
 
 interface SessionPayload {
   pat: string;
@@ -78,7 +84,6 @@ interface AsanaSessionConfig {
   projectGids: string[];
   projectNames: Record<string, string>;
   fieldMap: Record<string, Record<string, string | undefined>>;
-  statusToPhase: Record<string, PhaseKey>;
   syncLookbackDays: number;
 }
 
@@ -112,32 +117,6 @@ const taskFields = [
 ].join(",");
 
 const projectFields = ["gid", "name"].join(",");
-
-const defaultStatusToPhase: Record<string, PhaseKey> = {
-  "to do": "TODO",
-  "not started": "TODO",
-  "in progress": "DEV",
-  development: "DEV",
-  "working on it": "DEV",
-  "ready for qa": "QA",
-  qa: "QA",
-  "in qa": "QA",
-  "qa passed": "QA_PASSED",
-  "qa pass": "QA_PASSED",
-  "qa done": "QA_PASSED",
-  "qa failed": "QA_FAILED",
-  "qa fail": "QA_FAILED",
-  er: "ER",
-  "to release": "ER",
-  "ready to release": "ER",
-  done: "DONE",
-  completed: "DONE",
-  closed: "DONE",
-  live: "LIVE",
-  released: "LIVE",
-  "on hold": "ON_HOLD",
-  blocked: "ON_HOLD",
-};
 
 export default async function handler(request: any, response: any) {
   console.log("api/ops/tasks route entered");
@@ -217,10 +196,6 @@ function buildConfig(session: SessionPayload): AsanaSessionConfig {
     projectGids: parseCsv(process.env.ASANA_PROJECT_GIDS),
     projectNames: parseJsonObject<Record<string, string>>(process.env.ASANA_PROJECT_NAMES_JSON, {}),
     fieldMap: parseJsonObject<Record<string, Record<string, string | undefined>>>(process.env.ASANA_FIELD_MAP_JSON, {}),
-    statusToPhase: {
-      ...defaultStatusToPhase,
-      ...normalizeStatusPhaseMap(parseJsonObject<Record<string, PhaseKey>>(process.env.ASANA_STATUS_TO_PHASE_JSON, {})),
-    },
     syncLookbackDays: parsePositiveInt(process.env.ASANA_SYNC_LOOKBACK_DAYS, 30),
   };
 }
@@ -314,7 +289,7 @@ function normalizeTask(item: { task: AsanaTask; projectGid: string; projectName:
   const requestType = getMappedFieldValue(task.custom_fields, fieldMap, "requestType", ["request type", "type", "ticket type"]) ?? "Unknown";
   const eta = getMappedFieldDate(task.custom_fields, fieldMap, "eta", ["eta", "estimated completion", "target date"]) ?? normalizeDate(task.due_on ?? task.due_at);
   const qaState = getMappedFieldValue(task.custom_fields, fieldMap, "qaState", ["qa state", "qa status", "qa"]);
-  const phase = resolvePhase(status, qaState, Boolean(task.completed), config.statusToPhase);
+  const phase = resolvePhase(status, qaState, Boolean(task.completed));
   const createdAt = normalizeDate(task.created_at) ?? today;
   const modifiedAt = normalizeDate(task.modified_at) ?? today;
 
@@ -338,7 +313,7 @@ function normalizeTask(item: { task: AsanaTask; projectGid: string; projectName:
     eta,
     dueDate: normalizeDate(task.due_on ?? task.due_at),
     completedAt: normalizeDate(task.completed_at),
-    liveDate: phase === "LIVE" ? normalizeDate(task.completed_at ?? task.modified_at) : null,
+    liveDate: LIVE_STATUSES.has(phase.toLowerCase()) ? normalizeDate(task.completed_at ?? task.modified_at) : null,
     comments: [],
     phases: [{ type: phase, start: createdAt, end: null }],
     qaEvents: [],
@@ -365,11 +340,10 @@ function findField(fields: AsanaCustomField[] | undefined, gid: string | undefin
   return fields.find((field) => fallbackNames.includes((field.name ?? "").trim().toLowerCase()));
 }
 
-function resolvePhase(status: string | null, qaState: string | null, completed: boolean, statusToPhase: Record<string, PhaseKey>): PhaseKey {
-  if (completed) return "DONE";
-  const qaPhase = qaState ? statusToPhase[qaState.toLowerCase()] : undefined;
-  if (qaPhase && ["QA", "QA_PASSED", "QA_FAILED"].includes(qaPhase)) return qaPhase;
-  return status ? statusToPhase[status.toLowerCase()] ?? "TODO" : "TODO";
+function resolvePhase(status: string | null, qaState: string | null, completed: boolean): PhaseKey {
+  if (completed) return COMPLETED_PHASE;
+  if (qaState && QA_STATUSES.has(qaState.trim().toLowerCase())) return qaState.trim();
+  return status && status.trim() ? status.trim() : FALLBACK_PHASE;
 }
 
 function normalizePriority(value: string | null): Priority {
@@ -411,10 +385,6 @@ function parseJsonObject<T>(value: string | undefined, fallback: T): T {
   } catch {
     return fallback;
   }
-}
-
-function normalizeStatusPhaseMap(map: Record<string, PhaseKey>): Record<string, PhaseKey> {
-  return Object.fromEntries(Object.entries(map).map(([key, value]) => [key.toLowerCase(), value])) as Record<string, PhaseKey>;
 }
 
 function sanitizeOptional(value: string | null | undefined): string | undefined {

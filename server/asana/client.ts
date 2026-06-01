@@ -74,7 +74,7 @@ export async function fetchProjectTasks(projectGid: string, config: AsanaServerC
 }
 
 export async function validateAccessToken(accessToken: string): Promise<void> {
-  await asanaGet<{ data: { gid: string; name: string } }>("/users/me", { accessToken, projectGids: [], syncLookbackDays: 30, fieldMap: {}, projectNames: {}, statusToPhase: {} });
+  await asanaGet<{ data: { gid: string; name: string } }>("/users/me", { accessToken, projectGids: [], syncLookbackDays: 30, fieldMap: {}, projectNames: {} });
 }
 
 export async function fetchWorkspaces(config: AsanaServerConfig): Promise<AsanaProject[]> {

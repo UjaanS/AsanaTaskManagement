@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { addDays, daysBetween, formatLong, formatShort, isWeekend, todayISO, toDate } from "../lib/date";
 import { getRange, groupTasks, isDateInRange, sortTasks } from "../lib/ops";
-import { phaseClass, phaseLabels } from "../lib/theme";
+import { phaseClass, phaseLabel } from "../lib/theme";
 import type { DerivedTask, RangePreset, TimelineGroupKey } from "../types/ops";
 
 const dayWidth = 38;
@@ -77,7 +77,7 @@ export function TimelineView({ tasks }: { tasks: DerivedTask[] }) {
               <div className="timeline-group-row">{group}<span>{groups[group].length}</span></div>
               {sortTasks(groups[group], {}).map((task) => (
                 <div className="timeline-task-label" key={task.id}>
-                  <span className={`task-dot ${phaseClass[task.currentPhase]}`} />
+                  <span className={`task-dot ${phaseClass(task.currentPhase)}`} />
                   <span>{task.title}</span>
                   {task.qaReworkCount > 0 && <strong>{task.qaReworkCount}x</strong>}
                 </div>
@@ -108,12 +108,12 @@ export function TimelineView({ tasks }: { tasks: DerivedTask[] }) {
                       const width = Math.max(daysBetween(clampStart, clampEnd), 1) * dayWidth - 3;
                       return (
                         <div
-                          className={`timeline-segment ${phaseClass[phase.type]} ${task.etaStatus === "overdue" ? "overdue-outline" : ""}`}
+                          className={`timeline-segment ${phaseClass(phase.type)} ${task.etaStatus === "overdue" ? "overdue-outline" : ""}`}
                           style={{ left, width }}
-                          title={`${task.title}: ${phaseLabels[phase.type]} ${formatShort(phase.start)} - ${phase.end ? formatShort(phase.end) : "ongoing"}`}
+                          title={`${task.title}: ${phaseLabel(phase.type)} ${formatShort(phase.start)} - ${phase.end ? formatShort(phase.end) : "ongoing"}`}
                           key={`${task.id}-${phase.type}-${phase.start}-${index}`}
                         >
-                          {width > 92 ? phaseLabels[phase.type] : ""}
+                          {width > 92 ? phaseLabel(phase.type) : ""}
                         </div>
                       );
                     })}

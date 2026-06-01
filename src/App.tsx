@@ -15,14 +15,13 @@ import {
   saveConnection,
 } from "./data/opsDataSource";
 import { applyFilters, deriveTasks } from "./lib/ops";
+import { opsConfig } from "./lib/opsConfig";
 import type { ConnectionStatus, DerivedTask, Filters, OpsSummary, OpsTask, ProjectHealth, UserWorkload, ViewKey } from "./types/ops";
 
 const initialFilters: Filters = {
   assignee: "",
   project: "",
-  priority: "",
   phase: "",
-  requestType: "",
   flag: "",
   query: "",
 };
@@ -188,7 +187,7 @@ function buildSnapshot(tasks: DerivedTask[]): { summary: OpsSummary; projects: P
     const active = projectTasks.filter((task) => !task.completedAt);
     const completed = projectTasks.length - active.length;
     const overdueCount = active.filter((task) => task.etaStatus === "overdue").length;
-    const blockerCount = active.filter((task) => task.currentPhase === "ON_HOLD").length;
+    const blockerCount = active.filter((task) => opsConfig.isOnHold(task.currentPhase)).length;
     const riskScore = overdueCount * 35 + blockerCount * 30 + active.filter((task) => task.attentionSignals.length > 0).length * 10;
     return {
       id: name,
@@ -208,7 +207,7 @@ function buildSnapshot(tasks: DerivedTask[]): { summary: OpsSummary; projects: P
       name,
       active: active.length,
       overdue: active.filter((task) => task.etaStatus === "overdue").length,
-      blocked: active.filter((task) => task.currentPhase === "ON_HOLD").length,
+      blocked: active.filter((task) => opsConfig.isOnHold(task.currentPhase)).length,
       stale: active.filter((task) => task.staleDays > 0).length,
       completion: assigneeTasks.length === 0 ? 0 : Number((((assigneeTasks.length - active.length) / assigneeTasks.length) * 100).toFixed(1)),
     };
@@ -218,7 +217,7 @@ function buildSnapshot(tasks: DerivedTask[]): { summary: OpsSummary; projects: P
     summary: {
       completedToday: tasks.filter((task) => task.completedAt === today).length,
       overdue: tasks.filter((task) => task.etaStatus === "overdue").length,
-      newBlockers: tasks.filter((task) => task.currentPhase === "ON_HOLD").length,
+      newBlockers: tasks.filter((task) => opsConfig.isOnHold(task.currentPhase)).length,
       highRiskProjects: projects.filter((project) => project.healthStatus === "red").length,
       recentActivity: tasks.slice(0, 8).map((task) => ({
         id: task.id,

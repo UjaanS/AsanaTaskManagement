@@ -12,4 +12,14 @@ describe("generateEodReport", () => {
     expect(report).toContain("ETA missed");
     expect(report).toContain("Active:");
   });
+
+  it("uses serialised bullets with a blank line between items", () => {
+    const report = generateEodReport(deriveTasks(mockTasks, "2026-05-28"), "2026-05-28");
+    // Numbered prefix on at least one task line
+    expect(report).toMatch(/^1\. /m);
+    // No legacy asterisk bullets
+    expect(report).not.toMatch(/^\* /m);
+    // A numbered line is followed by a blank line
+    expect(report).toMatch(/^\d+\. .+\n\n/m);
+  });
 });

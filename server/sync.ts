@@ -52,7 +52,6 @@ export async function loadPersistentAsanaConfig(env: NodeJS.ProcessEnv = process
     syncLookbackDays: snapshot.syncLookbackDays,
     fieldMap: snapshot.fieldMap,
     projectNames: snapshot.projectNames,
-    statusToPhase: snapshot.statusToPhase,
   };
 
   const workspaceGid = baseConfig.workspaceGid ?? (await fetchWorkspaces(baseConfig))[0]?.gid;

@@ -1,8 +1,8 @@
 import type { AttentionFlag, AttentionSignal, EtaStatus, PhaseKey, Priority } from "../types/ops";
-import { flagLabels, phaseClass, phaseLabels } from "../lib/theme";
+import { flagLabels, phaseClass, phaseLabel } from "../lib/theme";
 
 export function PhaseBadge({ phase }: { phase: PhaseKey }) {
-  return <span className={`badge phase ${phaseClass[phase]}`}>{phaseLabels[phase]}</span>;
+  return <span className={`badge phase ${phaseClass(phase)}`}>{phaseLabel(phase)}</span>;
 }
 
 export function PriorityBadge({ priority }: { priority: Priority }) {

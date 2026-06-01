@@ -1,5 +1,5 @@
 import { AsanaApiError, fetchProject, fetchProjectCustomFieldSettings, fetchProjectTaskSample } from "./client";
-import { defaultStatusToPhase, readAsanaEnv, type AsanaFieldMap, type AsanaServerConfig } from "./config";
+import { readAsanaEnv, type AsanaFieldMap, type AsanaServerConfig } from "./config";
 import { fieldNameFallbacks } from "./normalize";
 import type { AsanaCustomField } from "./types";
 
@@ -74,7 +74,6 @@ export async function buildAsanaDiagnostics(env: NodeJS.ProcessEnv = process.env
     syncLookbackDays: snapshot.syncLookbackDays,
     fieldMap: snapshot.fieldMap,
     projectNames: snapshot.projectNames,
-    statusToPhase: snapshot.statusToPhase ?? defaultStatusToPhase,
   };
 
   diagnostics.projects = await Promise.all(snapshot.projectGids.map((projectGid) => diagnoseProject(projectGid, config)));

@@ -1,7 +1,8 @@
 import { useMemo, useState } from "react";
 import { formatShort } from "../lib/date";
 import { generateEodReport, groupTasks, sortTasks } from "../lib/ops";
-import { flagLabels, phaseClass, phaseLabels } from "../lib/theme";
+import { opsConfig } from "../lib/opsConfig";
+import { flagLabels, phaseClass, phaseDotClass, phaseLabel } from "../lib/theme";
 import type { DerivedTask } from "../types/ops";
 
 interface AssigneeDashboardProps {
@@ -22,8 +23,8 @@ export function AssigneeDashboard({ tasks, order, onOrderChange }: AssigneeDashb
   const globalStats = useMemo(() => ({
     total: tasks.length,
     overdue: tasks.filter((task) => task.etaStatus === "overdue").length,
-    qaFailed: tasks.filter((task) => task.currentPhase === "QA_FAILED" || task.qaReworkCount > 0).length,
-    blocked: tasks.filter((task) => task.currentPhase === "ON_HOLD").length,
+    qaFailed: tasks.filter((task) => task.qaReworkCount > 0).length,
+    blocked: tasks.filter((task) => opsConfig.isOnHold(task.currentPhase)).length,
   }), [tasks]);
 
   const moveTask = (targetTaskId: string, group: string) => {
@@ -92,7 +93,7 @@ export function AssigneeDashboard({ tasks, order, onOrderChange }: AssigneeDashb
             const isCollapsed = collapsed[group];
             const isUnassigned = group === "Unassigned";
             const counts = {
-              blocked: groupTasks.filter((task) => task.currentPhase === "ON_HOLD").length,
+              blocked: groupTasks.filter((task) => opsConfig.isOnHold(task.currentPhase)).length,
               stale: groupTasks.filter((task) => task.attentionFlags.includes("silent_work") || task.attentionFlags.includes("high_priority_stale")).length,
               qaFailed: groupTasks.reduce((sum, task) => sum + task.qaReworkCount, 0),
               eta: groupTasks.filter((task) => task.etaStatus === "overdue").length,
@@ -173,12 +174,11 @@ function SummaryStat({ tone, label, value, alert = false }: { tone: string; labe
 function TaskCompactRow({ task, onDragStart, onDrop }: { task: DerivedTask; onDragStart: () => void; onDrop: () => void }) {
   const [expanded, setExpanded] = useState(false);
   const isOverdue = task.etaStatus === "overdue";
-  const isQaFailed = task.currentPhase === "QA_FAILED" || task.qaReworkCount > 0;
-  const isQaPassed = task.currentPhase === "QA_PASSED";
+  const isQaFailed = task.qaReworkCount > 0;
 
   return (
     <div
-      className={`task-compact ${isOverdue ? "task-overdue" : ""} ${isQaFailed ? "task-qa-failed" : ""} ${isQaPassed ? "task-qa-passed" : ""}`}
+      className={`task-compact ${isOverdue ? "task-overdue" : ""} ${isQaFailed ? "task-qa-failed" : ""}`}
       draggable
       onClick={() => setExpanded((value) => !value)}
       onDragOver={(event) => event.preventDefault()}
@@ -188,7 +188,6 @@ function TaskCompactRow({ task, onDragStart, onDrop }: { task: DerivedTask; onDr
       <span aria-hidden="true" className="task-grip">::</span>
       <div className="task-main-col">
         <div className="task-title-row">
-          <span className="task-id-badge">{task.id}</span>
           <span className="task-title-text">{task.title}</span>
         </div>
         <div className="task-meta-row">
@@ -203,13 +202,12 @@ function TaskCompactRow({ task, onDragStart, onDrop }: { task: DerivedTask; onDr
         </div>
       </div>
       <div className="task-badges-col">
-        <span className={`badge-sm badge-phase ${phaseClass[task.currentPhase]}`}>{phaseLabels[task.currentPhase]}</span>
+        <span className={`badge-sm badge-phase ${phaseClass(task.currentPhase)}`}>{phaseLabel(task.currentPhase)}</span>
         {task.priority === "Critical" || task.priority === "High" ? (
           <span className={`badge-sm badge-priority-${task.priority.toLowerCase()}`}>{task.priority}</span>
         ) : null}
         {isOverdue && <span className="badge-sm badge-eta-overdue">{task.overdueDays}d late</span>}
-        {isQaPassed && <span className="badge-sm badge-qa-passed">Passed</span>}
-        {task.qaReworkCount > 0 && !isQaPassed && (
+        {isQaFailed && (
           <span className="badge-sm badge-qa-failed">{task.qaReworkCount} bounce{task.qaReworkCount > 1 ? "s" : ""}</span>
         )}
       </div>
@@ -226,9 +224,8 @@ function TaskExpandedDetails({ task }: { task: DerivedTask }) {
         <DetailItem label="Created" value={formatShort(task.createdAt)} />
         <DetailItem label="Assigned" value={formatShort(task.assignmentDate)} />
         <DetailItem label="Status" value={task.status ?? "Missing"} />
-        <DetailItem label="Phase" value={phaseLabels[task.currentPhase]} />
         <DetailItem label="Stale" value={`${task.staleDays}d`} />
-        <DetailItem label="QA Rework" value={`${task.qaReworkCount}`} />
+        <DetailItem label="QA bounces" value={`${task.qaReworkCount}`} />
       </div>
 
       {task.attentionSignals.length > 0 && (
@@ -246,8 +243,8 @@ function TaskExpandedDetails({ task }: { task: DerivedTask }) {
       <div className="qa-timeline">
         {task.phases.map((phase, index) => (
           <div className="qa-step" key={`${phase.type}-${phase.start}-${index}`}>
-            <span className={`qa-dot phase-dot-${phase.type.toLowerCase().replace("_", "-")}`} />
-            <span className="qa-step-title">{phaseLabels[phase.type]}</span>
+            <span className={`qa-dot ${phaseDotClass(phase.type)}`} />
+            <span className="qa-step-title">{phaseLabel(phase.type)}</span>
             <span className="qa-step-date">
               {formatShort(phase.start)}
               {phase.end ? ` -> ${formatShort(phase.end)}` : " -> ongoing"}

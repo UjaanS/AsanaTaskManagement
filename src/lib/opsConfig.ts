@@ -1,13 +1,68 @@
 import type { AttentionSeverity, PhaseKey } from "../types/ops";
 
+// Asana statuses (frammer.com workspace, Status custom field gid 1208070038885837):
+//   New/ To do · In Discussion · On Hold · In Dev · Done/ In Code review ·
+//   Ready For QA · In QA · QA Done/ In ER · To Release/ ER Done · Verify on Demo ·
+//   Live on Demo · Completed · Invalid · Internal Issue · Closed · Bug
+//
+// Status strings are matched case-insensitively. Add new Asana statuses here as the
+// team introduces them; unknown statuses fall through to the "active" default.
+
+const activeStatuses: PhaseKey[] = [
+  "New/ To do",
+  "In Discussion",
+  "On Hold",
+  "In Dev",
+  "Done/ In Code review",
+  "Ready For QA",
+  "In QA",
+  "QA Done/ In ER",
+  "To Release/ ER Done",
+  "Verify on Demo",
+  "Bug",
+];
+
+const closedStatuses: PhaseKey[] = [
+  "Live on Demo",
+  "Completed",
+  "Invalid",
+  "Internal Issue",
+  "Closed",
+];
+
+const qaStatuses: PhaseKey[] = ["Ready For QA", "In QA"];
+const devStatuses: PhaseKey[] = ["In Dev", "Done/ In Code review", "Bug"];
+const onHoldStatuses: PhaseKey[] = ["On Hold"];
+const liveStatuses: PhaseKey[] = ["Live on Demo"];
+
+const lower = (value: string) => value.toLowerCase();
+const lowerSet = (values: string[]) => new Set(values.map(lower));
+
+const activeSet = lowerSet(activeStatuses);
+const closedSet = lowerSet(closedStatuses);
+const qaSet = lowerSet(qaStatuses);
+const devSet = lowerSet(devStatuses);
+const onHoldSet = lowerSet(onHoldStatuses);
+const liveSet = lowerSet(liveStatuses);
+
 export const opsConfig = {
   inclusionStartDate: "2026-03-01",
   recentModifiedDays: 30,
   staleDays: 5,
   recentCommentDays: 3,
   qaDriftDays: 2,
-  activePhases: ["TODO", "DEV", "QA", "QA_FAILED", "ER", "ON_HOLD"] as PhaseKey[],
-  closedPhases: ["DONE", "LIVE"] as PhaseKey[],
+  activeStatuses,
+  closedStatuses,
+  qaStatuses,
+  devStatuses,
+  onHoldStatuses,
+  liveStatuses,
+  isActive: (phase: PhaseKey | null | undefined) => Boolean(phase) && activeSet.has(lower(phase as string)),
+  isClosed: (phase: PhaseKey | null | undefined) => Boolean(phase) && closedSet.has(lower(phase as string)),
+  isQa: (phase: PhaseKey | null | undefined) => Boolean(phase) && qaSet.has(lower(phase as string)),
+  isDev: (phase: PhaseKey | null | undefined) => Boolean(phase) && devSet.has(lower(phase as string)),
+  isOnHold: (phase: PhaseKey | null | undefined) => Boolean(phase) && onHoldSet.has(lower(phase as string)),
+  isLive: (phase: PhaseKey | null | undefined) => Boolean(phase) && liveSet.has(lower(phase as string)),
   liveCommentKeywords: ["live", "production", "released"],
   attentionSeverity: {
     eta_violation: "critical",

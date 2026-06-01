@@ -462,15 +462,25 @@ select {
   white-space: nowrap;
 }
 
-.phase-todo { background: #e5e7eb22; color: #9ca3af; }
-.phase-dev { background: #3b82f622; border-color: #2563eb; color: #60a5fa; }
-.phase-qa { background: #f59e0b22; border-color: #d97706; color: var(--amber); }
-.phase-qa-passed { background: #22c55e22; border-color: #16a34a; color: var(--green); }
-.phase-qa-failed { background: #ef444422; border-color: #dc2626; color: var(--red); }
-.phase-er { background: #8b5cf622; border-color: #7c3aed; color: var(--purple); }
-.phase-done { background: #9ca3af22; border-color: #6b7280; color: var(--muted); }
+/* Phase chips. Slugs are derived from the verbatim Asana status string by
+   replacing non-alphanumerics with "-" (see src/lib/theme.ts). */
+.phase-new-to-do,
+.phase-in-discussion,
+.phase-unknown { background: #e5e7eb22; color: #9ca3af; }
+.phase-in-dev,
+.phase-done-in-code-review,
+.phase-bug { background: #3b82f622; border-color: #2563eb; color: #60a5fa; }
+.phase-ready-for-qa,
+.phase-in-qa { background: #f59e0b22; border-color: #d97706; color: var(--amber); }
+.phase-qa-done-in-er,
+.phase-to-release-er-done,
+.phase-verify-on-demo { background: #8b5cf622; border-color: #7c3aed; color: var(--purple); }
+.phase-completed,
+.phase-closed,
+.phase-invalid,
+.phase-internal-issue { background: #9ca3af22; border-color: #6b7280; color: var(--muted); }
 .phase-on-hold { background: #ea580c22; border-color: #c2410c; color: var(--orange); }
-.phase-live { background: #16a34a22; border-color: #16a34a; color: var(--green); }
+.phase-live-on-demo { background: #16a34a22; border-color: #16a34a; color: var(--green); }
 
 .priority-critical,
 .priority-high {
@@ -659,14 +669,23 @@ select {
   border-left-color: var(--muted);
 }
 
-.phase-dot-todo { background: #9ca3af; }
-.phase-dot-dev { background: var(--blue); }
-.phase-dot-qa { background: var(--amber); }
-.phase-dot-qa-failed { background: var(--red); }
-.phase-dot-qa-passed { background: var(--green); }
-.phase-dot-er { background: var(--purple); }
-.phase-dot-done { background: var(--muted); }
+.phase-dot-new-to-do,
+.phase-dot-in-discussion,
+.phase-dot-unknown { background: #9ca3af; }
+.phase-dot-in-dev,
+.phase-dot-done-in-code-review,
+.phase-dot-bug { background: var(--blue); }
+.phase-dot-ready-for-qa,
+.phase-dot-in-qa { background: var(--amber); }
+.phase-dot-qa-done-in-er,
+.phase-dot-to-release-er-done,
+.phase-dot-verify-on-demo { background: var(--purple); }
+.phase-dot-completed,
+.phase-dot-closed,
+.phase-dot-invalid,
+.phase-dot-internal-issue { background: var(--muted); }
 .phase-dot-on-hold { background: var(--orange); }
+.phase-dot-live-on-demo { background: var(--green); }
 
 .attention-layout {
   display: grid;

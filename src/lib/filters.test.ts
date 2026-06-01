@@ -7,9 +7,7 @@ import type { Filters, OpsTask } from "../types/ops";
 const emptyFilters: Filters = {
   assignee: "",
   project: "",
-  priority: "",
   phase: "",
-  requestType: "",
   flag: "",
   query: "",
 };
@@ -23,13 +21,13 @@ describe("applyFilters", () => {
     createdAt: "2026-02-01",
     modifiedAt: "2026-03-01",
     assignmentDate: "2026-02-01",
-    status: "In Progress",
-    phase: "DEV",
+    status: "In Dev",
+    phase: "In Dev",
     priority: "Low",
     requestType: "Maintenance",
     eta: "2026-03-15",
     comments: [],
-    phases: [{ type: "DEV", start: "2026-02-01", end: null }],
+    phases: [{ type: "In Dev", start: "2026-02-01", end: null }],
     qaEvents: [],
     sortOrder: 99,
   };

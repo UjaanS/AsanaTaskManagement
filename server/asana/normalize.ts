@@ -4,6 +4,9 @@ import { opsConfig } from "../../src/lib/opsConfig";
 import type { AsanaFieldMap, AsanaServerConfig } from "./config";
 import type { AsanaCustomField, AsanaStory, AsanaTaskWithContext } from "./types";
 
+const FALLBACK_PHASE: PhaseKey = "New/ To do";
+const COMPLETED_PHASE: PhaseKey = "Completed";
+
 export const fieldNameFallbacks = {
   status: ["status", "stage", "task status"],
   priority: ["priority", "severity"],
@@ -27,10 +30,10 @@ export function normalizeAsanaTask(item: AsanaTaskWithContext, config: AsanaServ
   const requestType = getMappedFieldValue(task.custom_fields, fieldMap, "requestType") ?? "Unknown";
   const eta = getMappedFieldDate(task.custom_fields, fieldMap, "eta") ?? normalizeDate(task.due_on ?? task.due_at) ?? null;
   const qaState = getMappedFieldValue(task.custom_fields, fieldMap, "qaState");
-  const phase = resolvePhase(status, qaState, task.completed, config);
+  const phase = resolvePhase(status, qaState, task.completed);
   const comments = normalizeComments(stories);
-  const phases = buildPhases(task.created_at, status, phase, stories, fieldMap, config);
-  const qaEvents = buildQaEvents(phases, stories);
+  const phases = buildPhases(task.created_at, status, phase, stories, fieldMap);
+  const qaEvents = buildQaEvents(phases);
 
   if (!status && process.env.NODE_ENV !== "production") {
     console.warn(`Asana task ${task.gid} has no mapped status field for project ${projectGid}.`);
@@ -56,7 +59,7 @@ export function normalizeAsanaTask(item: AsanaTaskWithContext, config: AsanaServ
     eta,
     dueDate: normalizeDate(task.due_on ?? task.due_at),
     completedAt: normalizeDate(task.completed_at),
-    liveDate: phase === "LIVE" ? normalizeDate(task.completed_at ?? task.modified_at) : null,
+    liveDate: opsConfig.isLive(phase) ? normalizeDate(task.completed_at ?? task.modified_at) : null,
     comments,
     latestComment: comments[0],
     phases,
@@ -104,11 +107,10 @@ function normalizePriority(value: string | null): Priority {
   return "Medium";
 }
 
-function resolvePhase(status: string | null, qaState: string | null, completed: boolean | undefined, config: AsanaServerConfig): PhaseKey {
-  if (completed) return "DONE";
-  const qaPhase = qaState ? config.statusToPhase[qaState.toLowerCase()] : undefined;
-  if (qaPhase && ["QA", "QA_PASSED", "QA_FAILED"].includes(qaPhase)) return qaPhase;
-  return status ? config.statusToPhase[status.toLowerCase()] ?? "TODO" : "TODO";
+function resolvePhase(status: string | null, qaState: string | null, completed: boolean | undefined): PhaseKey {
+  if (completed) return COMPLETED_PHASE;
+  if (qaState && opsConfig.isQa(qaState)) return qaState;
+  return status && status.trim() ? status.trim() : FALLBACK_PHASE;
 }
 
 function normalizeComments(stories: AsanaStory[]): OpsComment[] {
@@ -124,7 +126,7 @@ function normalizeComments(stories: AsanaStory[]): OpsComment[] {
     }));
 }
 
-function buildPhases(createdAt: string, status: string | null, fallbackPhase: PhaseKey, stories: AsanaStory[], fieldMap: AsanaFieldMap, config: AsanaServerConfig): OpsPhase[] {
+function buildPhases(createdAt: string, status: string | null, fallbackPhase: PhaseKey, stories: AsanaStory[], fieldMap: AsanaFieldMap): OpsPhase[] {
   const statusFieldName = fieldMap.statusFieldName ?? "Status";
   const changes = stories
     .map((story) => parseStatusChange(story, statusFieldName))
@@ -137,44 +139,48 @@ function buildPhases(createdAt: string, status: string | null, fallbackPhase: Ph
 
   const phases: OpsPhase[] = [];
   const createdDate = normalizeDate(createdAt) ?? changes[0].date;
-  const firstPhase = changes[0].from ? config.statusToPhase[changes[0].from.toLowerCase()] ?? "TODO" : "TODO";
+  const firstPhase = changes[0].from?.trim() || FALLBACK_PHASE;
   if (createdDate < changes[0].date) phases.push({ type: firstPhase, start: createdDate, end: changes[0].date });
 
   changes.forEach((change, index) => {
-    const type = config.statusToPhase[change.to.toLowerCase()] ?? fallbackPhase;
+    const type = change.to.trim() || fallbackPhase;
     phases.push({
       type,
       start: change.date,
       end: changes[index + 1]?.date ?? null,
-      tester: ["QA", "QA_PASSED", "QA_FAILED"].includes(type) ? change.author ?? undefined : undefined,
+      tester: opsConfig.isQa(type) ? change.author ?? undefined : undefined,
     });
   });
 
   return phases.length ? phases : [{ type: fallbackPhase, start: createdDate, end: null }];
 }
 
-function buildQaEvents(phases: OpsPhase[], stories: AsanaStory[]): QAEvent[] {
-  const phaseEvents = phases
-    .filter((phase) => ["QA", "QA_PASSED", "QA_FAILED"].includes(phase.type))
-    .map((phase, index) => ({
-      id: `phase-${phase.type}-${phase.start}-${index}`,
-      type: phase.type === "QA_FAILED" ? "failed" : phase.type === "QA_PASSED" ? "passed" : "moved_to_qa",
-      at: phase.start,
-      tester: phase.tester,
-      reason: phase.reason,
-    } satisfies QAEvent));
-
-  const qaCommentEvents = stories
-    .filter((story) => story.resource_subtype === "comment_added" && /qa|retest|failed|passed/i.test(story.text ?? ""))
-    .map((story) => ({
-      id: story.gid,
-      type: /fail/i.test(story.text ?? "") ? "failed" : /pass/i.test(story.text ?? "") ? "passed" : "moved_to_qa",
-      at: normalizeDate(story.created_at) ?? todayISO(),
-      tester: story.created_by?.name,
-      reason: story.text,
-    } satisfies QAEvent));
-
-  return [...phaseEvents, ...qaCommentEvents].sort((a, b) => a.at.localeCompare(b.at));
+// QA bounce = a transition from a QA-family status (Ready For QA / In QA) back to a
+// dev-family status (In Dev / Done in Code review / Bug). Asana does not expose a
+// "QA Failed" status in this workspace; failure manifests purely as the transition.
+function buildQaEvents(phases: OpsPhase[]): QAEvent[] {
+  const events: QAEvent[] = [];
+  for (let i = 1; i < phases.length; i++) {
+    const prev = phases[i - 1];
+    const curr = phases[i];
+    if (opsConfig.isQa(prev.type) && opsConfig.isDev(curr.type)) {
+      events.push({
+        id: `bounce-${curr.start}-${i}`,
+        type: "failed",
+        at: curr.start,
+        tester: prev.tester,
+        reason: curr.reason,
+      });
+    } else if (opsConfig.isQa(curr.type) && !opsConfig.isQa(prev.type)) {
+      events.push({
+        id: `to-qa-${curr.start}-${i}`,
+        type: "moved_to_qa",
+        at: curr.start,
+        tester: curr.tester,
+      });
+    }
+  }
+  return events;
 }
 
 function parseStatusChange(story: AsanaStory, statusFieldName: string) {

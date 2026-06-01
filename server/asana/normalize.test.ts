@@ -18,13 +18,6 @@ const config: AsanaServerConfig = {
     },
   },
   projectNames: { p1: "Payment Gateway" },
-  statusToPhase: {
-    "in progress": "DEV",
-    "ready for qa": "QA",
-    "qa failed": "QA_FAILED",
-    blocked: "ON_HOLD",
-    done: "DONE",
-  },
 };
 
 const taskContext: AsanaTaskWithContext = {
@@ -40,18 +33,18 @@ const taskContext: AsanaTaskWithContext = {
     due_on: "2026-05-30",
     completed: false,
     custom_fields: [
-      { gid: "status-gid", name: "Status", enum_value: { name: "In Progress" }, display_value: "In Progress" },
+      { gid: "status-gid", name: "Status", enum_value: { name: "In Dev" }, display_value: "In Dev" },
       { gid: "priority-gid", name: "Priority", enum_value: { name: "High" }, display_value: "High" },
       { gid: "type-gid", name: "Request Type", enum_value: { name: "Bug" }, display_value: "Bug" },
       { gid: "eta-gid", name: "ETA", date_value: { date: "2026-05-29" }, display_value: "2026-05-29" },
-      { gid: "qa-gid", name: "QA State", enum_value: { name: "Ready for QA" }, display_value: "Ready for QA" },
+      { gid: "qa-gid", name: "QA State", enum_value: { name: "Ready For QA" }, display_value: "Ready For QA" },
     ],
     permalink_url: "https://app.asana.com/0/p1/120",
   },
   stories: [
     {
       gid: "s1",
-      text: "changed Status from \"In Progress\" to \"Ready for QA\"",
+      text: "changed Status from \"In Dev\" to \"Ready For QA\"",
       resource_subtype: "enum_custom_field_changed",
       created_at: "2026-05-26T10:00:00.000Z",
       created_by: { gid: "u2", name: "Priya" },
@@ -78,15 +71,16 @@ describe("Asana normalization", () => {
       projectGid: "p1",
       assignee: "Ravi",
       assigneeGid: "u1",
-      status: "In Progress",
+      status: "In Dev",
       priority: "High",
       requestType: "Bug",
-      qaState: "Ready for QA",
+      qaState: "Ready For QA",
       eta: "2026-05-29",
-      phase: "QA",
+      // qaState overrides status when in a QA family — Ready For QA is verbatim.
+      phase: "Ready For QA",
     });
     expect(task.comments[0].body).toContain("QA passed");
-    expect(task.phases.some((phase) => phase.type === "QA")).toBe(true);
+    expect(task.phases.some((phase) => phase.type === "Ready For QA")).toBe(true);
   });
 
   it("falls back safely when custom fields are missing", () => {
@@ -119,11 +113,11 @@ describe("Asana normalization", () => {
       "2026-05-28",
     );
 
-    expect(task.status).toBe("In Progress");
+    expect(task.status).toBe("In Dev");
     expect(task.priority).toBe("High");
     expect(task.requestType).toBe("Bug");
     expect(task.eta).toBe("2026-05-29");
-    expect(task.qaState).toBe("Ready for QA");
+    expect(task.qaState).toBe("Ready For QA");
   });
 
   it("filters tasks by AOCC runtime inclusion rules", () => {
