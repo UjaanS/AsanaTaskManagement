@@ -1,8 +1,8 @@
-import type { DerivedTask } from "../types/ops";
-import { addDays, toDate, todayISO } from "./date";
-import { groupTasks } from "./grouping";
+import type { AttentionFlag, DerivedTask } from "../types/ops";
+import { addDays, formatShort, toDate, todayISO } from "./date";
+import { groupTasks, sortTasks } from "./grouping";
 import { opsConfig } from "./opsConfig";
-import { phaseLabel } from "./theme";
+import { flagLabels, phaseLabel } from "./theme";
 
 export interface EodItem {
   id: string;
@@ -97,47 +97,53 @@ function itemRank(item: EodItem): number {
   return 3;
 }
 
-// Founder-friendly WhatsApp text. Plain text only (WhatsApp can't render HTML),
-// but warm and scannable with light status emoji — not a database export.
-export function renderEodText(report: EodReport): string {
-  const lines: string[] = [`📋 Operations Update — ${report.dateLabel}`, ""];
+// Clipboard / WhatsApp text. Kept in the original plain-text format the team is
+// used to pasting into WhatsApp (the redesign only changed the on-screen modal,
+// not this copy output). Numbered per-assignee lists with blank-line spacing.
+export function generateEodReport(tasks: DerivedTask[], today = todayISO()): string {
+  const byAssignee = groupTasks(
+    tasks.filter((task) => task.modifiedAt >= addDays(today, -1) || task.attentionSignals.length > 0 || opsConfig.isQa(task.currentPhase)),
+    "assignee",
+  );
+  const lines: string[] = [`EOD Update - ${toDate(today).toLocaleDateString("en-IN", { day: "numeric", month: "long", year: "numeric" })}`, "----------------------------------------", ""];
 
-  const riskBits: string[] = [];
-  if (report.risk.overdue) riskBits.push(`🔴 ${report.risk.overdue} Overdue`);
-  if (report.risk.qaRejections) riskBits.push(`🧪 ${report.risk.qaRejections} QA Rejection${report.risk.qaRejections > 1 ? "s" : ""}`);
-  if (report.risk.needsReview) riskBits.push(`⚠️ ${report.risk.needsReview} Need Review`);
-  if (report.risk.blocked) riskBits.push(`⛔ ${report.risk.blocked} Blocked`);
-  if (riskBits.length === 0) riskBits.push("✅ Nothing at risk");
-  lines.push(riskBits.join("   "));
-  lines.push(`Active Tasks: ${report.totals.active}   In QA: ${report.totals.inQa}`);
-  lines.push("");
+  Object.entries(byAssignee)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .forEach(([assignee, assigneeTasks]) => {
+      lines.push(assignee.toUpperCase());
+      lines.push("");
+      sortTasks(assigneeTasks, {}).forEach((task, idx) => {
+        const state = phaseLabel(task.currentPhase);
+        const bits = [`${task.title} -> ${state}`];
+        if (task.qaReworkCount) bits.push(`${task.qaReworkCount} QA bounce${task.qaReworkCount > 1 ? "es" : ""}`);
+        if (task.etaStatus === "overdue") bits.push(`ETA missed by ${task.overdueDays}d`);
+        const topSignal = task.attentionSignals[0];
+        if (topSignal) bits.push(topSignal.action);
+        lines.push(`${idx + 1}. ${bits.join(" | ")}`);
+        lines.push("");
+      });
+    });
 
-  if (report.groups.length === 0) {
-    lines.push("No updates to report today.");
-    return lines.join("\n");
+  const flagged = tasks.filter((task) => task.attentionSignals.length > 0);
+  lines.push("----------------------------------------", "ATTENTION NEEDED", "");
+  if (flagged.length === 0) {
+    lines.push("1. No open operational flags");
+    lines.push("");
+  } else {
+    const counts = flagged.reduce<Record<AttentionFlag, number>>((acc, task) => {
+      task.attentionSignals.forEach((signal) => {
+        acc[signal.flag] = (acc[signal.flag] ?? 0) + 1;
+      });
+      return acc;
+    }, {} as Record<AttentionFlag, number>);
+    Object.entries(counts).forEach(([flag, count], idx) => {
+      lines.push(`${idx + 1}. ${count} ${flagLabels[flag as AttentionFlag]}`);
+      lines.push("");
+    });
   }
 
-  report.groups.forEach((group) => {
-    lines.push(`${group.assignee} (${group.taskCount})`);
-    group.items.forEach((item, idx) => {
-      lines.push(`${idx + 1}. ${itemLine(item)}`);
-    });
-    lines.push("");
-  });
-
-  return lines.join("\n").trimEnd();
-}
-
-function itemLine(item: EodItem): string {
-  let line = `${item.title} → ${item.phase}`;
-  if (item.etaOverdue) line += ` ⚠️ ETA missed by ${item.overdueDays}d`;
-  if (item.qaReworkCount) line += ` 🧪 ${item.qaReworkCount} QA bounce${item.qaReworkCount > 1 ? "es" : ""}`;
-  if (item.blocked) line += " ⛔ blocked";
-  if (item.action) line += ` — ${item.action}`;
-  return line;
-}
-
-// Back-compat: callers/tests that want the plain-text report in one call.
-export function generateEodReport(tasks: DerivedTask[], today = todayISO()): string {
-  return renderEodText(buildEodReport(tasks, today));
+  const active = tasks.filter((task) => opsConfig.isActive(task.currentPhase)).length;
+  const inQa = tasks.filter((task) => opsConfig.isQa(task.currentPhase)).length;
+  lines.push(`Active: ${active} | In QA: ${inQa} | Generated: ${formatShort(today)}`);
+  return lines.join("\n");
 }

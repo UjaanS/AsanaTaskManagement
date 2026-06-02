@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { mockTasks } from "../data/mockTasks";
 import { deriveTasks } from "./derive";
-import { buildEodReport, generateEodReport, renderEodText, riskRank } from "./summary";
+import { buildEodReport, generateEodReport, riskRank } from "./summary";
 
 const TODAY = "2026-05-28";
 const derived = () => deriveTasks(mockTasks, TODAY);
@@ -48,22 +48,19 @@ describe("riskRank", () => {
   });
 });
 
-describe("renderEodText (WhatsApp copy)", () => {
-  it("is founder-friendly: titled header, risk line, totals, numbered per-person lists", () => {
-    const text = renderEodText(buildEodReport(derived(), TODAY));
+describe("generateEodReport (WhatsApp copy — original plain-text format)", () => {
+  it("keeps the original format: dated header, ATTENTION NEEDED, totals", () => {
+    const text = generateEodReport(derived(), TODAY);
 
-    expect(text).toContain("📋 Operations Update — May 28");
-    expect(text).toContain("Active Tasks:");
-    expect(text).toContain("In QA:");
-    // numbered items
-    expect(text).toMatch(/^1\. /m);
-    // no legacy asterisk bullets and no old header
-    expect(text).not.toMatch(/^\* /m);
-    expect(text).not.toContain("EOD Update -");
+    expect(text).toContain("EOD Update - 28 May 2026");
+    expect(text).toContain("ATTENTION NEEDED");
+    expect(text).toContain("Active:");
   });
 
-  it("generateEodReport stays a thin wrapper over build + render", () => {
-    const tasks = derived();
-    expect(generateEodReport(tasks, TODAY)).toBe(renderEodText(buildEodReport(tasks, TODAY)));
+  it("uses numbered items with a blank line between them", () => {
+    const text = generateEodReport(derived(), TODAY);
+    expect(text).toMatch(/^1\. /m);
+    expect(text).not.toMatch(/^\* /m);
+    expect(text).toMatch(/^\d+\. .+\n\n/m);
   });
 });

@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { buildEodReport, renderEodText } from "../lib/ops";
+import { buildEodReport, generateEodReport } from "../lib/ops";
 import { avatarColor, initials, phaseClass } from "../lib/theme";
 import type { EodItem } from "../lib/ops";
 import type { DerivedTask } from "../types/ops";
@@ -14,7 +14,9 @@ export function EODModal({ tasks, onClose }: EODModalProps) {
   const report = useMemo(() => buildEodReport(tasks), [tasks]);
 
   const copy = async () => {
-    await navigator.clipboard.writeText(renderEodText(report));
+    // Modal is the new visual; the copied text stays in the original plain-text
+    // format the team pastes into WhatsApp.
+    await navigator.clipboard.writeText(generateEodReport(tasks));
     setCopied(true);
     window.setTimeout(() => setCopied(false), 1800);
   };
