@@ -1,28 +1,24 @@
 import type { AttentionFlag, PhaseKey } from "../types/ops";
 
-export const phaseLabels: Record<PhaseKey, string> = {
-  TODO: "To Do",
-  DEV: "Development",
-  QA: "In QA",
-  QA_PASSED: "QA Passed",
-  QA_FAILED: "QA Failed",
-  ER: "Release",
-  DONE: "Done",
-  ON_HOLD: "On Hold",
-  LIVE: "Live",
-};
+// Asana statuses are user-facing strings; the dashboard shows them verbatim.
+export function phaseLabel(phase: PhaseKey | null | undefined): string {
+  return phase ?? "Unknown";
+}
 
-export const phaseClass: Record<PhaseKey, string> = {
-  TODO: "phase-todo",
-  DEV: "phase-dev",
-  QA: "phase-qa",
-  QA_PASSED: "phase-qa-passed",
-  QA_FAILED: "phase-qa-failed",
-  ER: "phase-er",
-  DONE: "phase-done",
-  ON_HOLD: "phase-on-hold",
-  LIVE: "phase-live",
-};
+// Build a CSS class slug from an Asana status string.
+// e.g. "In Dev" → "phase-in-dev", "QA Done/ In ER" → "phase-qa-done-in-er".
+export function phaseClass(phase: PhaseKey | null | undefined): string {
+  if (!phase) return "phase-unknown";
+  const slug = phase.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+  return `phase-${slug || "unknown"}`;
+}
+
+// Companion slug for the qa-dot variants in the timeline view.
+export function phaseDotClass(phase: PhaseKey | null | undefined): string {
+  if (!phase) return "phase-dot-unknown";
+  const slug = phase.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+  return `phase-dot-${slug || "unknown"}`;
+}
 
 export const flagLabels: Record<AttentionFlag, string> = {
   possible_stale_status: "Possible stale status",

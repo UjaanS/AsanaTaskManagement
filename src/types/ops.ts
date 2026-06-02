@@ -1,13 +1,6 @@
-export type PhaseKey =
-  | "TODO"
-  | "DEV"
-  | "QA"
-  | "QA_PASSED"
-  | "QA_FAILED"
-  | "ER"
-  | "DONE"
-  | "ON_HOLD"
-  | "LIVE";
+// PhaseKey is the verbatim Asana status string (e.g. "In Dev", "Ready For QA",
+// "Live on Demo"). Asana is the source of truth — we no longer abstract.
+export type PhaseKey = string;
 
 export type Priority = "Critical" | "High" | "Medium" | "Low";
 export type EtaStatus = "ok" | "due_today" | "overdue" | "missing";
@@ -100,7 +93,7 @@ export interface DerivedTask extends OpsTask {
 }
 
 export interface OpsDataSource {
-  listTasks(): Promise<OpsTask[]>;
+  listTasks(options?: { includeOld?: boolean }): Promise<OpsTask[]>;
 }
 
 export interface ConnectionStatus {
@@ -140,9 +133,7 @@ export interface UserWorkload {
 export interface Filters {
   assignee: string;
   project: string;
-  priority: string;
   phase: string;
-  requestType: string;
   flag: string;
   query: string;
 }

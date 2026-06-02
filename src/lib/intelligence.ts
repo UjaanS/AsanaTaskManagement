@@ -31,7 +31,7 @@ export function detectSignals(task: DerivedTask, today: string): AttentionSignal
     ));
   }
 
-  if (hasLiveComment && !opsConfig.closedPhases.includes(task.currentPhase)) {
+  if (hasLiveComment && !opsConfig.isClosed(task.currentPhase)) {
     signals.push(signal(
       "possible_stale_status",
       "comment",
@@ -40,17 +40,23 @@ export function detectSignals(task: DerivedTask, today: string): AttentionSignal
     ));
   }
 
-  if (task.currentPhase === "QA_FAILED" || (lastQaFailure && lastQaFailure.at <= addDays(today, -opsConfig.qaDriftDays))) {
+  // QA drift: a bounce happened (In QA → In Dev) and the task hasn't been retested
+  // within qaDriftDays. The ticket is sitting in dev after a failure.
+  if (
+    lastQaFailure &&
+    opsConfig.isDev(task.currentPhase) &&
+    lastQaFailure.at <= addDays(today, -opsConfig.qaDriftDays)
+  ) {
     signals.push(signal(
       "qa_drift",
       "qa",
-      lastQaFailure?.reason ? `QA failure still needs follow-up: ${lastQaFailure.reason}` : "QA failed and no pass is visible yet.",
+      lastQaFailure.reason ? `QA bounce still needs follow-up: ${lastQaFailure.reason}` : "QA bounce and no retest is visible yet.",
       "Confirm rework owner and retest timing.",
     ));
   }
 
   if (
-    opsConfig.activePhases.includes(task.currentPhase) &&
+    opsConfig.isActive(task.currentPhase) &&
     task.staleDays >= opsConfig.staleDays &&
     !task.comments.some((comment) => comment.createdAt >= addDays(today, -opsConfig.recentCommentDays))
   ) {
@@ -63,7 +69,7 @@ export function detectSignals(task: DerivedTask, today: string): AttentionSignal
     ));
   }
 
-  if (task.staleDays >= opsConfig.staleDays && ["Critical", "High"].includes(task.priority) && opsConfig.activePhases.includes(task.currentPhase)) {
+  if (task.staleDays >= opsConfig.staleDays && ["Critical", "High"].includes(task.priority) && opsConfig.isActive(task.currentPhase)) {
     signals.push(signal(
       "high_priority_stale",
       "activity",

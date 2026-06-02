@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AssigneeDashboard } from "./components/AssigneeDashboard";
 import { AttentionPanel } from "./components/AttentionPanel";
 import { EODModal } from "./components/EODModal";
@@ -11,18 +11,16 @@ import {
   clearConnection,
   getConnectionStatus,
   opsDataSource,
-  runSync,
   saveConnection,
 } from "./data/opsDataSource";
 import { applyFilters, deriveTasks } from "./lib/ops";
+import { opsConfig } from "./lib/opsConfig";
 import type { ConnectionStatus, DerivedTask, Filters, OpsSummary, OpsTask, ProjectHealth, UserWorkload, ViewKey } from "./types/ops";
 
 const initialFilters: Filters = {
   assignee: "",
   project: "",
-  priority: "",
   phase: "",
-  requestType: "",
   flag: "",
   query: "",
 };
@@ -43,36 +41,45 @@ export default function App() {
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
 
-  const loadDashboard = useCallback(async () => {
+  // Monotonic fetch token: every loadDashboard call grabs a fresh id, and only
+  // applies its result if it's still the latest in-flight call. Prevents a slow
+  // stale fetch from clobbering a fresher one when the user toggles rapidly.
+  const fetchTokenRef = useRef(0);
+
+  const loadDashboard = useCallback(async (includeOld: boolean) => {
+    const myToken = ++fetchTokenRef.current;
     setIsLoading(true);
     try {
-      const nextTasks = await opsDataSource.listTasks();
+      const nextTasks = await opsDataSource.listTasks({ includeOld });
+      if (myToken !== fetchTokenRef.current) return; // a newer fetch superseded us
       setTasks(nextTasks);
       setLoadError(null);
     } catch (error: unknown) {
+      if (myToken !== fetchTokenRef.current) return;
       setLoadError(error instanceof Error ? error.message : "Unable to load AOCC tasks.");
     } finally {
-      setIsLoading(false);
+      if (myToken === fetchTokenRef.current) setIsLoading(false);
     }
 
     const settled = await Promise.allSettled([getConnectionStatus()]);
+    if (myToken !== fetchTokenRef.current) return;
     if (settled[0].status === "fulfilled") setConnectionStatus(settled[0].value);
   }, []);
 
+  // Re-fetch from Asana whenever the archived-tasks toggle flips, so the wire
+  // payload reflects the user's intent (and stays small in the default case).
   useEffect(() => {
-    let active = true;
-    loadDashboard().finally(() => {
-      if (!active) return;
-    });
-    return () => {
-      active = false;
-    };
-  }, [loadDashboard]);
+    void loadDashboard(showOld);
+  }, [loadDashboard, showOld]);
 
   async function handleSaveConnection(pat: string, workspaceGid: string) {
+    // The Settings save button should return as soon as the PAT is validated and the
+    // session cookie is set. Pulling the full dashboard can take a long time on a
+    // fresh workspace (auto-discovered projects + tasks + stories), so fire it in
+    // the background and let the dashboard's own loading state communicate progress.
     await saveConnection(pat, workspaceGid);
     setConnectionStatus(await getConnectionStatus());
-    await loadDashboard();
+    void loadDashboard(showOld);
   }
 
   async function handleClearConnection() {
@@ -83,12 +90,14 @@ export default function App() {
   }
 
   async function handleRunSync() {
+    // Sync = re-pull from Asana into the dashboard state. loadDashboard does
+    // exactly that, so there is no need to also call runSync separately (which
+    // would double the wire payload).
     setIsSyncing(true);
     setSyncMessage(null);
     try {
-      const result = await runSync();
-      setSyncMessage(result.taskCount === undefined ? "Sync completed." : `Sync completed with ${result.taskCount} tasks.`);
-      await loadDashboard();
+      await loadDashboard(showOld);
+      setSyncMessage("Sync completed.");
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unable to sync Asana data.";
       setSyncMessage(message);
@@ -143,7 +152,7 @@ export default function App() {
           {isLoading && <div className="empty-state">Loading operational task snapshots...</div>}
           {loadError && <div className="empty-state error-state">{loadError}</div>}
           {!isLoading && !loadError && filteredTasks.length === 0 && (
-            <div className="empty-state">No tasks match the current filters. Clear filters or enable Show Old.</div>
+            <div className="empty-state">No tasks match the current filters. Clear filters or enable <em>Include archived tasks</em>.</div>
           )}
           {!isLoading && !loadError && filteredTasks.length > 0 && view === "assignee" && (
             <AssigneeDashboard tasks={filteredTasks} order={order} onOrderChange={setOrder} />
@@ -154,7 +163,7 @@ export default function App() {
       </main>
 
       <footer className="footer">
-        Persisted Asana data. Drag rows inside an assignee to adjust local priority order for this session. Show Old reveals hidden legacy work.
+        Persisted Asana data. Drag rows inside an assignee to adjust local priority order for this session. Default view is the last {opsConfig.recentTaskMonths} months — toggle <em>Include archived tasks</em> for the full history.
       </footer>
 
       {showEod && <EODModal tasks={filteredTasks} onClose={() => setShowEod(false)} />}
@@ -188,7 +197,7 @@ function buildSnapshot(tasks: DerivedTask[]): { summary: OpsSummary; projects: P
     const active = projectTasks.filter((task) => !task.completedAt);
     const completed = projectTasks.length - active.length;
     const overdueCount = active.filter((task) => task.etaStatus === "overdue").length;
-    const blockerCount = active.filter((task) => task.currentPhase === "ON_HOLD").length;
+    const blockerCount = active.filter((task) => opsConfig.isOnHold(task.currentPhase)).length;
     const riskScore = overdueCount * 35 + blockerCount * 30 + active.filter((task) => task.attentionSignals.length > 0).length * 10;
     return {
       id: name,
@@ -208,7 +217,7 @@ function buildSnapshot(tasks: DerivedTask[]): { summary: OpsSummary; projects: P
       name,
       active: active.length,
       overdue: active.filter((task) => task.etaStatus === "overdue").length,
-      blocked: active.filter((task) => task.currentPhase === "ON_HOLD").length,
+      blocked: active.filter((task) => opsConfig.isOnHold(task.currentPhase)).length,
       stale: active.filter((task) => task.staleDays > 0).length,
       completion: assigneeTasks.length === 0 ? 0 : Number((((assigneeTasks.length - active.length) / assigneeTasks.length) * 100).toFixed(1)),
     };
@@ -218,7 +227,7 @@ function buildSnapshot(tasks: DerivedTask[]): { summary: OpsSummary; projects: P
     summary: {
       completedToday: tasks.filter((task) => task.completedAt === today).length,
       overdue: tasks.filter((task) => task.etaStatus === "overdue").length,
-      newBlockers: tasks.filter((task) => task.currentPhase === "ON_HOLD").length,
+      newBlockers: tasks.filter((task) => opsConfig.isOnHold(task.currentPhase)).length,
       highRiskProjects: projects.filter((project) => project.healthStatus === "red").length,
       recentActivity: tasks.slice(0, 8).map((task) => ({
         id: task.id,

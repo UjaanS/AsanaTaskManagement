@@ -1,12 +1,11 @@
 import crypto from "node:crypto";
-import type { OpsTask, PhaseKey } from "../../src/types/ops";
+import type { OpsTask } from "../../src/types/ops";
+import { opsConfig } from "../../src/lib/opsConfig";
 import { getDb, rowToBool, rowToDate, type TaskRecord } from "../db";
 import { calculateTaskRisk } from "../insights/etaRisk";
 import { shouldEscalate } from "../insights/escalation";
 import { computeProjectHealth } from "../insights/projectHealth";
 import { staleSeverity } from "../insights/staleDetection";
-
-const completedPhases = new Set<PhaseKey>(["DONE", "LIVE"]);
 
 export interface TaskDto {
   id: string;
@@ -30,8 +29,8 @@ export async function persistOpsTasks(tasks: OpsTask[]) {
     for (const task of tasks) {
       const assigneeId = task.assigneeGid ? upsertUser(task.assigneeGid, task.assignee ?? "Unassigned", now) : null;
       const projectId = upsertProject(task.projectGid ?? task.project, task.project, now);
-      const completed = Boolean(task.completedAt) || completedPhases.has(task.phase);
-      const blocked = task.phase === "ON_HOLD" || /block/i.test(task.status ?? "");
+      const completed = Boolean(task.completedAt) || opsConfig.isClosed(task.phase);
+      const blocked = opsConfig.isOnHold(task.phase) || /block/i.test(task.status ?? "");
       const existing = db.prepare("SELECT id FROM tasks WHERE asana_gid = ?").get(task.id) as { id: string } | undefined;
       const taskId = existing?.id ?? crypto.randomUUID();
       const values = {

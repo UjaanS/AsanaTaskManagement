@@ -2,6 +2,11 @@ import { fetchWorkspaceProjects, fetchWorkspaces } from "./client";
 import type { AsanaServerConfig } from "./config";
 import { AsanaConfigError, normalizeConfiguredValue, readAsanaEnv } from "./config";
 
+// Cap auto-discovered projects so first-time users with huge workspaces don't
+// hang while the dashboard tries to fetch every project's tasks + stories.
+// Set ASANA_PROJECT_GIDS in .env to override / pick specific projects.
+const AUTO_PROJECT_LIMIT = 25;
+
 export async function buildSessionAsanaConfig(
   accessToken: string,
   workspaceGid: string | null | undefined,
@@ -19,7 +24,6 @@ export async function buildSessionAsanaConfig(
     syncLookbackDays: snapshot.syncLookbackDays,
     fieldMap: snapshot.fieldMap,
     projectNames: snapshot.projectNames,
-    statusToPhase: snapshot.statusToPhase,
   };
 
   const resolvedWorkspaceGid = baseConfig.workspaceGid ?? (await fetchWorkspaces(baseConfig))[0]?.gid;
@@ -27,7 +31,9 @@ export async function buildSessionAsanaConfig(
     throw new AsanaConfigError("No Asana workspace is available for this PAT.");
   }
 
-  const discoveredProjects = baseConfig.projectGids.length === 0 ? await fetchWorkspaceProjects(resolvedWorkspaceGid, baseConfig) : [];
+  const discoveredProjects = baseConfig.projectGids.length === 0
+    ? (await fetchWorkspaceProjects(resolvedWorkspaceGid, baseConfig)).slice(0, AUTO_PROJECT_LIMIT)
+    : [];
   const projectGids = baseConfig.projectGids.length > 0 ? baseConfig.projectGids : discoveredProjects.map((project) => project.gid);
   if (projectGids.length === 0) {
     throw new AsanaConfigError("No Asana projects are available in the connected workspace.");

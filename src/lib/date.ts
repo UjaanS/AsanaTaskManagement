@@ -18,6 +18,12 @@ export function addDays(value: string, days: number): string {
   return date.toISOString().slice(0, 10);
 }
 
+export function addMonths(value: string, months: number): string {
+  const date = toDate(value);
+  date.setUTCMonth(date.getUTCMonth() + months);
+  return date.toISOString().slice(0, 10);
+}
+
 export function daysBetween(start: string, end: string): number {
   return Math.round((toDate(end).getTime() - toDate(start).getTime()) / MS_PER_DAY);
 }

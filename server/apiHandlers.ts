@@ -73,7 +73,11 @@ export async function handleAuthPat(input: {
   }
 }
 
-export async function handleOpsTasks(input: { method: string; cookieHeader?: string | string[] }): Promise<ApiResult> {
+export async function handleOpsTasks(input: {
+  method: string;
+  cookieHeader?: string | string[];
+  query?: URLSearchParams;
+}): Promise<ApiResult> {
   if (input.method !== "GET") {
     return methodNotAllowed("GET");
   }
@@ -86,13 +90,23 @@ export async function handleOpsTasks(input: { method: string; cookieHeader?: str
     };
   }
 
+  // ?includeOld=true releases the rolling 3-month created_at filter and queries
+  // Asana without modified_since. Default is to keep the wire payload bounded.
+  const includeOld = parseTruthyParam(input.query?.get("includeOld"));
+
   try {
     const config = await buildSessionAsanaConfig(session.pat, session.workspaceGid);
-    const tasks = await fetchOpsTasks(config);
+    const tasks = await fetchOpsTasks(config, { includeOld });
     return { status: 200, body: { tasks } };
   } catch (error) {
     return toApiError(error);
   }
+}
+
+function parseTruthyParam(value: string | null | undefined): boolean {
+  if (!value) return false;
+  const normalized = value.trim().toLowerCase();
+  return normalized === "true" || normalized === "1" || normalized === "yes";
 }
 
 export function toApiError(error: unknown): ApiResult {

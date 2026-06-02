@@ -10,13 +10,13 @@ const baseTask: OpsTask = {
   createdAt: "2026-05-01",
   modifiedAt: "2026-05-27",
   assignmentDate: "2026-05-01",
-  status: "In Progress",
-  phase: "DEV",
+  status: "In Dev",
+  phase: "In Dev",
   priority: "Medium",
   requestType: "Feature",
   eta: "2026-05-30",
   comments: [],
-  phases: [{ type: "DEV", start: "2026-05-01", end: null }],
+  phases: [{ type: "In Dev", start: "2026-05-01", end: null }],
   qaEvents: [],
   sortOrder: 1,
 };
@@ -40,8 +40,8 @@ describe("deriveTask", () => {
       {
         ...baseTask,
         eta: "2026-05-25",
-        phase: "DONE",
-        phases: [{ type: "DONE", start: "2026-05-25", end: "2026-05-25" }],
+        phase: "Completed",
+        phases: [{ type: "Completed", start: "2026-05-25", end: "2026-05-25" }],
       },
       "2026-05-28",
     );
@@ -54,9 +54,9 @@ describe("deriveTask", () => {
     const task = deriveTask(
       {
         ...baseTask,
-        status: "ER",
-        phase: "ER",
-        phases: [{ type: "ER", start: "2026-05-26", end: null }],
+        status: "QA Done/ In ER",
+        phase: "QA Done/ In ER",
+        phases: [{ type: "QA Done/ In ER", start: "2026-05-26", end: null }],
         comments: [{ id: "c1", author: "Nam", body: "Client confirms this is live in production.", createdAt: "2026-05-27" }],
       },
       "2026-05-28",
