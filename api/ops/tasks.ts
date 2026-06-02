@@ -9,6 +9,10 @@ const LIVE_STATUSES = new Set(["live on demo"]);
 const COMPLETED_PHASE: PhaseKey = "Completed";
 const FALLBACK_PHASE: PhaseKey = "New/ To do";
 
+// Default dashboard window: tasks created in the last N months. The frontend's
+// "Include archived tasks" toggle adds ?includeOld=true to release this filter.
+const RECENT_TASK_MONTHS = 3;
+
 interface SessionPayload {
   pat: string;
   workspaceGid?: string;
@@ -85,6 +89,7 @@ interface AsanaSessionConfig {
   projectNames: Record<string, string>;
   fieldMap: Record<string, Record<string, string | undefined>>;
   syncLookbackDays: number;
+  includeOld: boolean;
 }
 
 const asanaBaseUrl = "https://app.asana.com/api/1.0";
@@ -149,7 +154,8 @@ export default async function handler(request: any, response: any) {
     console.log("api/ops/tasks session decrypt success");
 
     console.log("api/ops/tasks Asana fetch started");
-    const config = buildConfig(session);
+    const includeOld = parseTruthyParam(readQueryParam(request, "includeOld"));
+    const config = buildConfig(session, includeOld);
     const fetched = await fetchAsanaTasks(config);
 
     console.log("api/ops/tasks task normalization started");
@@ -189,7 +195,7 @@ function decryptSession(value: string, secret: string): SessionPayload | null {
   }
 }
 
-function buildConfig(session: SessionPayload): AsanaSessionConfig {
+function buildConfig(session: SessionPayload, includeOld: boolean): AsanaSessionConfig {
   return {
     pat: session.pat,
     workspaceGid: sanitizeOptional(session.workspaceGid) ?? sanitizeOptional(process.env.ASANA_WORKSPACE_GID),
@@ -197,20 +203,30 @@ function buildConfig(session: SessionPayload): AsanaSessionConfig {
     projectNames: parseJsonObject<Record<string, string>>(process.env.ASANA_PROJECT_NAMES_JSON, {}),
     fieldMap: parseJsonObject<Record<string, Record<string, string | undefined>>>(process.env.ASANA_FIELD_MAP_JSON, {}),
     syncLookbackDays: parsePositiveInt(process.env.ASANA_SYNC_LOOKBACK_DAYS, 30),
+    includeOld,
   };
 }
 
 async function fetchAsanaTasks(config: AsanaSessionConfig): Promise<Array<{ task: AsanaTask; projectGid: string; projectName: string }>> {
   const projects = await resolveProjects(config);
   const contexts: Array<{ task: AsanaTask; projectGid: string; projectName: string }> = [];
+  // Asana supports modified_since (ISO 8601) on /projects/{gid}/tasks. Use it to
+  // bound wire volume in the default window — newly-created tasks satisfy it
+  // because modified_at == created_at at creation time.
+  const modifiedSince = config.includeOld ? "" : `&modified_since=${encodeURIComponent(`${monthsAgoISO(RECENT_TASK_MONTHS)}T00:00:00Z`)}`;
 
   for (const project of projects) {
-    const tasks = await fetchAll<AsanaTask>(
-      `/projects/${encodeURIComponent(project.gid)}/tasks?limit=100&opt_fields=${encodeURIComponent(taskFields)}`,
-      config.pat,
-    );
-    const projectName = config.projectNames[project.gid] ?? project.name;
-    tasks.forEach((task) => contexts.push({ task, projectGid: project.gid, projectName }));
+    try {
+      const tasks = await fetchAll<AsanaTask>(
+        `/projects/${encodeURIComponent(project.gid)}/tasks?limit=100&opt_fields=${encodeURIComponent(taskFields)}${modifiedSince}`,
+        config.pat,
+      );
+      const projectName = config.projectNames[project.gid] ?? project.name;
+      tasks.forEach((task) => contexts.push({ task, projectGid: project.gid, projectName }));
+    } catch (error) {
+      // Isolate per-project failures so one bad project doesn't abort the rest.
+      console.warn(`api/ops/tasks project ${project.gid} fetch failed`, safeErrorLog(error));
+    }
   }
 
   return contexts;
@@ -276,7 +292,7 @@ function normalizeTasks(items: Array<{ task: AsanaTask; projectGid: string; proj
 
   return items
     .map((item, index) => normalizeTask(item, config, today, index))
-    .filter((task) => shouldIncludeTask(task, today, config.syncLookbackDays))
+    .filter((task) => shouldIncludeTask(task, today, config.syncLookbackDays, config.includeOld))
     .sort((a, b) => b.modifiedAt.localeCompare(a.modifiedAt));
 }
 
@@ -354,8 +370,11 @@ function normalizePriority(value: string | null): Priority {
   return "Medium";
 }
 
-function shouldIncludeTask(task: OpsTask, today: string, lookbackDays: number): boolean {
-  return task.createdAt >= "2026-03-01" || task.modifiedAt >= addDays(today, -lookbackDays) || Boolean(task.recentlyReassigned);
+function shouldIncludeTask(task: OpsTask, today: string, _lookbackDays: number, includeOld: boolean): boolean {
+  if (includeOld) return true;
+  // Rolling 3-month window on created_at — the dashboard's "Include archived tasks"
+  // toggle releases this strict cutoff.
+  return task.createdAt >= monthsAgoISO(RECENT_TASK_MONTHS, today);
 }
 
 function inferProjectName(task: AsanaTask, fallback: string, projectGid: string): string {
@@ -414,6 +433,28 @@ function addDays(date: string, days: number): string {
   const parsed = new Date(`${date}T00:00:00.000Z`);
   parsed.setUTCDate(parsed.getUTCDate() + days);
   return parsed.toISOString().slice(0, 10);
+}
+
+function monthsAgoISO(months: number, today: string = todayISO()): string {
+  const parsed = new Date(`${today}T00:00:00.000Z`);
+  parsed.setUTCMonth(parsed.getUTCMonth() - months);
+  return parsed.toISOString().slice(0, 10);
+}
+
+function readQueryParam(request: any, name: string): string | null {
+  const raw = request.query?.[name];
+  if (typeof raw === "string") return raw;
+  if (Array.isArray(raw) && raw.length > 0) return String(raw[0]);
+  // Fallback: parse from request.url if Vercel's query helper isn't present.
+  const url = typeof request.url === "string" ? request.url : "";
+  const match = url.match(new RegExp(`[?&]${name}=([^&]+)`));
+  return match ? decodeURIComponent(match[1]) : null;
+}
+
+function parseTruthyParam(value: string | null | undefined): boolean {
+  if (!value) return false;
+  const normalized = value.trim().toLowerCase();
+  return normalized === "true" || normalized === "1" || normalized === "yes";
 }
 
 function writeJson(response: any, status: number, body: unknown) {

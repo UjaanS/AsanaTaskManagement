@@ -8,11 +8,15 @@ import { fetchOpsTasks } from "./asana/service";
 import { handleAuthPat, handleHealth, handleOpsTasks, handlePing, type ApiResult } from "./apiHandlers";
 import { loadDotEnv } from "./env";
 import { getSummary, listProjectHealth, listTaskDtos, listUserWorkloads, persistOpsTasks } from "./persistence/tasks";
+import { validateAppSecretOrExit } from "./security";
 import { runSync } from "./sync";
 
 const defaultPort = Number(process.env.PORT ?? 8787);
 const defaultHost = process.env.HOST ?? (process.env.NODE_ENV === "production" ? "0.0.0.0" : "127.0.0.1");
 loadDotEnv();
+// Fail fast on a missing or weak APP_SECRET. Otherwise the first PAT save would
+// crash with a generic 500 deep in the encryption path.
+validateAppSecretOrExit();
 
 export function startServer(port = defaultPort, host = defaultHost) {
   const server = http.createServer(async (request, response) => {
@@ -35,7 +39,7 @@ export function startServer(port = defaultPort, host = defaultHost) {
       }
 
       if (request.method === "GET" && url.pathname === "/api/ops/tasks") {
-        sendApiResult(response, await handleOpsTasks({ method: request.method, cookieHeader: request.headers.cookie }));
+        sendApiResult(response, await handleOpsTasks({ method: request.method, cookieHeader: request.headers.cookie, query: url.searchParams }));
         return;
       }
 
@@ -135,12 +139,19 @@ function toSafeError(error: unknown): { status: number; message: string; logMess
   };
 }
 
+// Single source of truth for the allowed origin. Defaults to the Vite dev
+// origin so the dashboard works out of the box; production deployments MUST
+// set CORS_ORIGIN explicitly to the deployed dashboard origin.
+function corsOrigin(): string {
+  return process.env.CORS_ORIGIN ?? "http://127.0.0.1:5173";
+}
+
 function sendJson(response: http.ServerResponse, status: number, payload: unknown) {
   response.writeHead(status, {
     "Content-Type": "application/json",
-    "Access-Control-Allow-Origin": process.env.CORS_ORIGIN ?? "*",
+    "Access-Control-Allow-Origin": corsOrigin(),
     "Access-Control-Allow-Headers": "Content-Type",
-    "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
+    "Access-Control-Allow-Methods": "GET,POST,DELETE,OPTIONS",
   });
   response.end(payload === null ? "" : JSON.stringify(payload));
 }
@@ -148,7 +159,7 @@ function sendJson(response: http.ServerResponse, status: number, payload: unknow
 function sendApiResult(response: http.ServerResponse, result: ApiResult) {
   response.writeHead(result.status, {
     "Content-Type": "application/json",
-    "Access-Control-Allow-Origin": process.env.CORS_ORIGIN ?? "http://127.0.0.1:5173",
+    "Access-Control-Allow-Origin": corsOrigin(),
     "Access-Control-Allow-Headers": "Content-Type",
     "Access-Control-Allow-Methods": "GET,POST,DELETE,OPTIONS",
     ...(result.headers ?? {}),

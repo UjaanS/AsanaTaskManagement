@@ -141,33 +141,71 @@ describe("Asana normalization", () => {
     expect(hidden).toHaveLength(0);
   });
 
-  it("includes old tasks when a recent assignment story is available", () => {
-    const included = normalizeAsanaTasks(
+  it("default view excludes tasks created more than 3 months ago", () => {
+    const result = normalizeAsanaTasks(
       [
         {
           ...taskContext,
           task: {
             ...taskContext.task,
-            gid: "reassigned",
-            created_at: "2026-02-01T10:00:00.000Z",
-            modified_at: "2026-03-01T10:00:00.000Z",
+            gid: "older-than-window",
+            // 5 months before the "today" used by the test below.
+            created_at: "2025-12-28T10:00:00.000Z",
+            modified_at: "2026-05-27T10:00:00.000Z",
           },
-          stories: [
-            {
-              gid: "assigned-story",
-              text: "assigned to Ravi",
-              resource_subtype: "assigned",
-              created_at: "2026-05-20T10:00:00.000Z",
-              created_by: { gid: "u2", name: "Nam" },
-            },
-          ],
+          stories: [],
         },
       ],
       config,
       "2026-05-28",
     );
 
-    expect(included).toHaveLength(1);
-    expect(included[0].recentlyReassigned).toBe(true);
+    expect(result).toHaveLength(0);
+  });
+
+  it("includeOld option includes tasks created more than 3 months ago", () => {
+    const result = normalizeAsanaTasks(
+      [
+        {
+          ...taskContext,
+          task: {
+            ...taskContext.task,
+            gid: "older-than-window",
+            created_at: "2025-12-28T10:00:00.000Z",
+            modified_at: "2026-05-27T10:00:00.000Z",
+          },
+          stories: [],
+        },
+      ],
+      config,
+      "2026-05-28",
+      { includeOld: true },
+    );
+
+    expect(result).toHaveLength(1);
+    expect(result[0].id).toBe("older-than-window");
+  });
+
+  it("recent tasks (inside the 3-month window) are visible in the default view", () => {
+    const result = normalizeAsanaTasks(
+      [
+        {
+          ...taskContext,
+          task: {
+            ...taskContext.task,
+            gid: "recent",
+            // 2 months before the "today" — inside the window.
+            created_at: "2026-03-28T10:00:00.000Z",
+            modified_at: "2026-05-27T10:00:00.000Z",
+          },
+          stories: [],
+        },
+      ],
+      config,
+      "2026-05-28",
+    );
+
+    expect(result).toHaveLength(1);
+    expect(result[0].id).toBe("recent");
   });
 });

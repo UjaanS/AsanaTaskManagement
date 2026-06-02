@@ -33,9 +33,12 @@ export function FilterBar({ tasks, filters, showOld, onFiltersChange, onShowOldC
       <Select label="Project" value={filters.project} options={projects} onChange={(value) => update("project", value)} />
       <Select label="Phase" value={filters.phase} options={phases} onChange={(value) => update("phase", value)} />
       <Select label="Flag" value={filters.flag} options={flags} optionLabels={flagLabels} onChange={(value) => update("flag", value)} />
-      <label className="toggle-pill">
+      <label
+        className="toggle-pill"
+        title="By default only tasks created in the last 3 months are shown. Enable to include older / archived tasks (may load slower)."
+      >
         <input type="checkbox" checked={showOld} onChange={(event) => onShowOldChange(event.target.checked)} />
-        Show Old
+        Include archived tasks
       </label>
     </div>
   );

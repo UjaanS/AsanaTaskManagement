@@ -15,10 +15,15 @@ export const fieldNameFallbacks = {
   qaState: ["qa state", "qa status", "qa"],
 };
 
-export function normalizeAsanaTasks(items: AsanaTaskWithContext[], config: AsanaServerConfig, today = todayISO()): OpsTask[] {
+export function normalizeAsanaTasks(
+  items: AsanaTaskWithContext[],
+  config: AsanaServerConfig,
+  today = todayISO(),
+  options: { includeOld?: boolean } = {},
+): OpsTask[] {
   return items
     .map((item, index) => normalizeAsanaTask(item, config, today, index))
-    .filter((task) => shouldIncludeTask(task, today, config.syncLookbackDays))
+    .filter((task) => shouldIncludeTask(task, today, Boolean(options.includeOld)))
     .sort((a, b) => b.modifiedAt.localeCompare(a.modifiedAt));
 }
 
@@ -206,8 +211,12 @@ function hasRecentAssignment(stories: AsanaStory[], today: string, lookbackDays:
   return stories.some((story) => (/assigned/i.test(story.text ?? "") || story.resource_subtype === "assigned") && normalizeDate(story.created_at)! >= cutoff);
 }
 
-function shouldIncludeTask(task: OpsTask, today: string, lookbackDays: number): boolean {
-  return task.createdAt >= opsConfig.inclusionStartDate || task.modifiedAt >= addDays(today, -lookbackDays) || Boolean(task.recentlyReassigned);
+// Default view (includeOld = false): strict created_at window — only tasks
+// created in the last opsConfig.recentTaskMonths are visible. The "Show older
+// tasks" toggle on the dashboard releases this entirely.
+function shouldIncludeTask(task: OpsTask, today: string, includeOld: boolean): boolean {
+  if (includeOld) return true;
+  return task.createdAt >= opsConfig.recentCreatedSince(today);
 }
 
 function normalizeDate(value: string | null | undefined): string | null {

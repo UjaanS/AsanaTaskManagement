@@ -5,8 +5,9 @@ interface OpsTasksResponse {
 }
 
 export class ApiOpsDataSource implements OpsDataSource {
-  async listTasks(): Promise<OpsTask[]> {
-    const response = await fetch("/api/ops/tasks");
+  async listTasks(options: { includeOld?: boolean } = {}): Promise<OpsTask[]> {
+    const path = options.includeOld ? "/api/ops/tasks?includeOld=true" : "/api/ops/tasks";
+    const response = await fetch(path);
     if (!response.ok) {
       const body = await response.json().catch(() => null) as { error?: string } | null;
       throw new Error(body?.error ?? `Unable to load Asana tasks (${response.status})`);
@@ -43,8 +44,8 @@ export async function saveConnection(pat: string, workspaceGid: string): Promise
   }
 }
 
-export async function runSync(): Promise<{ taskCount?: number }> {
-  const tasks = await opsDataSource.listTasks();
+export async function runSync(options: { includeOld?: boolean } = {}): Promise<{ taskCount?: number }> {
+  const tasks = await opsDataSource.listTasks(options);
   return { taskCount: tasks.length };
 }
 

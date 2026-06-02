@@ -1,5 +1,5 @@
 import type { DerivedTask, EtaStatus, OpsTask } from "../types/ops";
-import { addDays, daysBetween, todayISO } from "./date";
+import { daysBetween, todayISO } from "./date";
 import { detectSignals } from "./intelligence";
 import { opsConfig } from "./opsConfig";
 
@@ -12,10 +12,9 @@ export function deriveTask(task: OpsTask, today = todayISO()): DerivedTask {
     : 0;
   const etaStatus = getEtaStatus(task.eta, currentPhase, today);
   const qaReworkCount = task.qaEvents.filter((event) => event.type === "failed").length;
-  const includedByDefault =
-    task.createdAt >= opsConfig.inclusionStartDate ||
-    task.modifiedAt >= addDays(today, -opsConfig.recentModifiedDays) ||
-    Boolean(task.recentlyReassigned);
+  // Strict rolling window: created_at within the last opsConfig.recentTaskMonths.
+  // The dashboard's "Show older tasks" toggle releases this filter via showOld.
+  const includedByDefault = task.createdAt >= opsConfig.recentCreatedSince(today);
 
   const base: DerivedTask = {
     ...task,

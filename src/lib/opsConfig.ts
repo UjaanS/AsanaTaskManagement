@@ -1,4 +1,5 @@
 import type { AttentionSeverity, PhaseKey } from "../types/ops";
+import { addMonths, todayISO } from "./date";
 
 // Asana statuses (frammer.com workspace, Status custom field gid 1208070038885837):
 //   New/ To do · In Discussion · On Hold · In Dev · Done/ In Code review ·
@@ -45,8 +46,15 @@ const devSet = lowerSet(devStatuses);
 const onHoldSet = lowerSet(onHoldStatuses);
 const liveSet = lowerSet(liveStatuses);
 
+// Default view shows only tasks created in the last RECENT_TASK_MONTHS months.
+// The toggle in the dashboard ("Show older tasks") releases this filter.
+const RECENT_TASK_MONTHS = 3;
+
 export const opsConfig = {
-  inclusionStartDate: "2026-03-01",
+  recentTaskMonths: RECENT_TASK_MONTHS,
+  // Rolling cutoff: 3 months back from today. Recomputed each call so the window
+  // moves with the calendar — never hardcode a date.
+  recentCreatedSince: (today: string = todayISO()) => addMonths(today, -RECENT_TASK_MONTHS),
   recentModifiedDays: 30,
   staleDays: 5,
   recentCommentDays: 3,

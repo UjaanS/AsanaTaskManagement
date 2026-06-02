@@ -93,7 +93,7 @@ export interface DerivedTask extends OpsTask {
 }
 
 export interface OpsDataSource {
-  listTasks(): Promise<OpsTask[]>;
+  listTasks(options?: { includeOld?: boolean }): Promise<OpsTask[]>;
 }
 
 export interface ConnectionStatus {
