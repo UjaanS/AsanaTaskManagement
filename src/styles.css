@@ -942,28 +942,40 @@ select {
 }
 
 .timeline-shell {
+  border: 1px solid var(--border-med);
+  border-radius: 12px;
   display: grid;
   grid-template-columns: 300px minmax(0, 1fr);
   max-height: calc(100vh - 210px);
+  overflow: hidden;
 }
 
+/* Frozen label column — separated from the scrolling grid with a stronger
+   border and a soft shadow so the two panes read as distinct surfaces. */
 .timeline-left {
-  border-right: 1px solid var(--border);
+  border-right: 1px solid var(--border-strong);
+  box-shadow: 4px 0 8px -4px rgba(0, 0, 0, 0.25);
+  position: relative;
+  z-index: 3;
 }
 
 .timeline-corner {
-  background: var(--header);
-  border-bottom: 1px solid var(--border);
+  align-items: center;
+  background: var(--group);
+  border-bottom: 1px solid var(--border-strong);
   color: var(--muted);
+  display: flex;
   font-size: 11px;
   font-weight: 700;
+  letter-spacing: 0.04em;
   min-height: 44px;
-  padding: 14px;
+  padding: 0 14px;
+  text-transform: uppercase;
 }
 
 .timeline-header {
-  background: var(--header);
-  border-bottom: 1px solid var(--border);
+  background: var(--group);
+  border-bottom: 1px solid var(--border-strong);
   overflow: hidden;
 }
 
@@ -973,7 +985,7 @@ select {
 
 .timeline-day {
   border-right: 1px solid var(--border);
-  color: var(--faint);
+  color: var(--muted);
   flex: 0 0 38px;
   font-size: 10px;
   min-height: 44px;
@@ -981,14 +993,26 @@ select {
   text-align: center;
 }
 
+.timeline-day strong {
+  color: var(--text);
+  display: block;
+  font-size: 12px;
+  margin-top: 1px;
+}
+
 .timeline-day.today {
-  background: color-mix(in srgb, var(--accent), transparent 90%);
+  background: color-mix(in srgb, var(--accent), transparent 82%);
   color: var(--accent);
   font-weight: 700;
 }
 
+.timeline-day.today strong {
+  color: var(--accent);
+}
+
 .timeline-day.weekend {
-  color: var(--ghost);
+  background: color-mix(in srgb, var(--border-strong), transparent 88%);
+  color: var(--faint);
 }
 
 .timeline-rows {
@@ -996,10 +1020,13 @@ select {
   overflow: hidden;
 }
 
+/* Group bands — clearly heavier than task rows so each owner/project reads as
+   a distinct block. Matched heights across both panes keep rows aligned. */
 .timeline-group-row,
 .timeline-group-bar {
   background: var(--group);
-  border-bottom: 1px solid var(--border);
+  border-top: 1px solid var(--border-strong);
+  border-bottom: 2px solid var(--border-strong);
   height: 38px;
 }
 
@@ -1007,47 +1034,67 @@ select {
   align-items: center;
   color: var(--text);
   display: flex;
-  font-size: 12px;
-  font-weight: 700;
+  font-size: 11px;
+  font-weight: 800;
   justify-content: space-between;
+  letter-spacing: 0.04em;
   padding: 0 14px;
+  text-transform: uppercase;
 }
 
 .timeline-group-row span {
-  color: var(--faint);
+  background: var(--input);
+  border-radius: 999px;
+  color: var(--muted);
   font-size: 10px;
+  font-weight: 700;
+  padding: 1px 8px;
 }
 
 .timeline-task-label,
 .timeline-task-row {
   border-bottom: 1px solid var(--border);
-  height: 34px;
+  height: 36px;
 }
+
+/* Zebra striping, shared between both panes via the row index from the
+   component. Label pane uses solid alternating fills; the grid pane uses a
+   translucent stripe so the vertical day gridlines remain visible through it. */
+.timeline-task-label.row-even { background: var(--panel); }
+.timeline-task-label.row-odd { background: color-mix(in srgb, var(--text) 6%, var(--panel)); }
+.timeline-task-row.row-odd { background: color-mix(in srgb, var(--text) 5%, transparent); }
 
 .timeline-task-label {
   align-items: center;
   display: flex;
-  gap: 7px;
+  gap: 8px;
   padding: 0 12px 0 22px;
 }
 
-.timeline-task-label span:nth-child(2) {
+.timeline-task-name {
+  color: var(--text);
   flex: 1;
-  font-size: 11px;
+  font-size: 12px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .timeline-task-label strong {
+  background: var(--red-bg);
+  border-radius: 4px;
   color: var(--red);
   font-size: 10px;
+  font-weight: 700;
+  padding: 1px 5px;
 }
 
 .task-dot {
   border-radius: 50%;
-  height: 7px;
-  width: 7px;
+  box-shadow: 0 0 0 2px color-mix(in srgb, currentColor, transparent 70%);
+  flex-shrink: 0;
+  height: 8px;
+  width: 8px;
 }
 
 .timeline-body {
@@ -1078,7 +1125,11 @@ select {
 }
 
 .timeline-bg-day.weekend {
-  background: color-mix(in srgb, var(--ghost), transparent 92%);
+  background: color-mix(in srgb, var(--border-strong), transparent 90%);
+}
+
+.timeline-bg-day.today-line {
+  background: color-mix(in srgb, var(--accent), transparent 92%);
 }
 
 .timeline-bg-day.today-line::after {
@@ -1086,7 +1137,7 @@ select {
   bottom: 0;
   content: "";
   left: 18px;
-  opacity: 0.6;
+  opacity: 0.9;
   position: absolute;
   top: 0;
   width: 2px;
@@ -1096,34 +1147,56 @@ select {
   position: relative;
 }
 
+/* Phase bars: taller, with a tinted fill, a full border, and a bold colored
+   left accent — driven by the phase class's `color` via currentColor — so
+   adjacent phases are clearly separated and high-contrast on any surface. */
 .timeline-segment {
-  border-radius: 4px;
+  align-items: center;
+  background: color-mix(in srgb, currentColor 16%, var(--panel));
+  border: 1px solid color-mix(in srgb, currentColor 45%, transparent);
+  border-left: 3px solid currentColor;
+  border-radius: 5px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.18);
+  display: flex;
   font-size: 10px;
   font-weight: 700;
-  height: 18px;
+  height: 22px;
   overflow: hidden;
-  padding: 3px 5px;
+  padding: 0 6px;
   position: absolute;
   text-overflow: ellipsis;
-  top: 8px;
+  top: 7px;
   white-space: nowrap;
   z-index: 1;
 }
 
 .overdue-outline {
-  box-shadow: 0 0 0 1px var(--red);
+  box-shadow: 0 0 0 2px var(--red), 0 1px 2px rgba(0, 0, 0, 0.18);
 }
 
 .eta-marker {
-  border-left: 2px solid var(--accent);
-  height: 28px;
+  background: var(--accent);
+  border-radius: 2px;
+  height: 30px;
   position: absolute;
   top: 3px;
+  width: 3px;
   z-index: 2;
 }
 
+.eta-marker::before {
+  background: inherit;
+  border-radius: 50%;
+  content: "";
+  height: 7px;
+  left: -2px;
+  position: absolute;
+  top: -3px;
+  width: 7px;
+}
+
 .eta-marker.missed {
-  border-color: var(--red);
+  background: var(--red);
 }
 
 .modal-backdrop {
