@@ -1,8 +1,9 @@
 import { useMemo, useState } from "react";
-import { formatShort } from "../lib/date";
-import { generateEodReport, groupTasks, sortTasks } from "../lib/ops";
+import { groupTasks, sortTasks } from "../lib/ops";
 import { opsConfig } from "../lib/opsConfig";
-import { flagLabels, phaseClass, phaseDotClass, phaseLabel } from "../lib/theme";
+import { avatarColor, initials, phaseClass, phaseDotClass, phaseLabel } from "../lib/theme";
+import { formatShort } from "../lib/date";
+import { flagLabels } from "../lib/theme";
 import type { DerivedTask } from "../types/ops";
 
 interface AssigneeDashboardProps {
@@ -14,18 +15,9 @@ interface AssigneeDashboardProps {
 export function AssigneeDashboard({ tasks, order, onOrderChange }: AssigneeDashboardProps) {
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null);
-  const [summaryCollapsed, setSummaryCollapsed] = useState(false);
-  const [copied, setCopied] = useState(false);
 
   const groups = useMemo(() => groupTasks(tasks, "assignee"), [tasks]);
   const groupNames = Object.keys(groups).sort((a, b) => (a === "Unassigned" ? -1 : b === "Unassigned" ? 1 : a.localeCompare(b)));
-  const report = useMemo(() => generateEodReport(tasks), [tasks]);
-  const globalStats = useMemo(() => ({
-    total: tasks.length,
-    overdue: tasks.filter((task) => task.etaStatus === "overdue").length,
-    qaFailed: tasks.filter((task) => task.qaReworkCount > 0).length,
-    blocked: tasks.filter((task) => opsConfig.isOnHold(task.currentPhase)).length,
-  }), [tasks]);
 
   const moveTask = (targetTaskId: string, group: string) => {
     if (!draggedTaskId || draggedTaskId === targetTaskId) return;
@@ -43,47 +35,12 @@ export function AssigneeDashboard({ tasks, order, onOrderChange }: AssigneeDashb
     setDraggedTaskId(null);
   };
 
-  const copyReport = async () => {
-    await navigator.clipboard.writeText(report);
-    setCopied(true);
-    window.setTimeout(() => setCopied(false), 1800);
-  };
-
   const toggleGroup = (group: string) => {
     setCollapsed((value) => ({ ...value, [group]: !value[group] }));
   };
 
   return (
     <div className="assignee-dashboard-wrapper">
-      <section className="whatsapp-summary">
-        <header className="summary-header">
-          <div className="summary-header-left">
-            <span className="summary-icon">W</span>
-            <h3>EOD Status Summary</h3>
-          </div>
-          <button className="summary-toggle" type="button" onClick={() => setSummaryCollapsed((value) => !value)}>
-            {summaryCollapsed ? "Show" : "Hide"}
-          </button>
-        </header>
-
-        {!summaryCollapsed && (
-          <div className="summary-content">
-            <div className="summary-stats-row">
-              <SummaryStat tone="total" label="Active Tasks" value={globalStats.total} />
-              <SummaryStat tone="overdue" label="Overdue" value={globalStats.overdue} alert={globalStats.overdue > 0} />
-              <SummaryStat tone="qa-failed" label="QA Issues" value={globalStats.qaFailed} alert={globalStats.qaFailed > 0} />
-              <SummaryStat tone="blocked" label="Blocked" value={globalStats.blocked} />
-            </div>
-            <pre className="summary-preview">{report}</pre>
-            <div className="summary-actions">
-              <button className="button button-accent" type="button" onClick={copyReport}>
-                {copied ? "Copied to Clipboard" : "Copy for WhatsApp"}
-              </button>
-            </div>
-          </div>
-        )}
-      </section>
-
       <section className="assignee-dashboard">
         {groupNames.length === 0 ? (
           <EmptyDashboard />
@@ -92,6 +49,7 @@ export function AssigneeDashboard({ tasks, order, onOrderChange }: AssigneeDashb
             const groupTasks = sortTasks(groups[group], order);
             const isCollapsed = collapsed[group];
             const isUnassigned = group === "Unassigned";
+            const color = avatarColor(group);
             const counts = {
               blocked: groupTasks.filter((task) => opsConfig.isOnHold(task.currentPhase)).length,
               stale: groupTasks.filter((task) => task.attentionFlags.includes("silent_work") || task.attentionFlags.includes("high_priority_stale")).length,
@@ -114,7 +72,12 @@ export function AssigneeDashboard({ tasks, order, onOrderChange }: AssigneeDashb
                   role="button"
                   tabIndex={0}
                 >
-                  <div className="card-avatar">{isUnassigned ? "?" : group.charAt(0).toUpperCase()}</div>
+                  <div
+                    className="card-avatar"
+                    style={isUnassigned ? undefined : { background: color.bg, color: color.fg }}
+                  >
+                    {isUnassigned ? "?" : initials(group)}
+                  </div>
                   <div className="card-header-info">
                     <div className="card-header-top">
                       <h4 className="card-name">{group}</h4>
@@ -154,19 +117,6 @@ export function AssigneeDashboard({ tasks, order, onOrderChange }: AssigneeDashb
           })
         )}
       </section>
-    </div>
-  );
-}
-
-function SummaryStat({ tone, label, value, alert = false }: { tone: string; label: string; value: number; alert?: boolean }) {
-  const icon = tone === "total" ? "T" : tone === "overdue" ? "!" : tone === "qa-failed" ? "Q" : "B";
-  return (
-    <div className="summary-stat">
-      <div className={`summary-stat-icon stat-${tone}`}>{icon}</div>
-      <div className="summary-stat-info">
-        <span className="summary-stat-value" style={{ color: alert ? "var(--red)" : undefined }}>{value}</span>
-        <span className="summary-stat-label">{label}</span>
-      </div>
     </div>
   );
 }

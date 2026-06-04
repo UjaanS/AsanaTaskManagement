@@ -6,7 +6,18 @@ import type { AsanaServerConfig } from "./config";
 import { normalizeAsanaTasks } from "./normalize";
 import type { AsanaTask, AsanaTaskWithContext } from "./types";
 
-const storyFetchConcurrency = 4;
+// Each Asana REST call is network-latency bound (~0.5s RTT), so the only way to
+// stay fast is to maximise parallelism. We fan out project task-lists and the
+// per-task story fetches across bounded concurrency pools rather than serially.
+// Asana's published limit is 150 req/min per token; these pools stay well under.
+const projectFetchConcurrency = 8;
+const storyFetchConcurrency = 10;
+
+interface TaskRef {
+  task: AsanaTask;
+  projectGid: string;
+  projectName: string;
+}
 
 export interface FetchOpsTasksOptions {
   // When false (default), only tasks created in the last opsConfig.recentTaskMonths
@@ -20,33 +31,37 @@ export async function fetchOpsTasks(
   config: AsanaServerConfig,
   options: FetchOpsTasksOptions = {},
 ): Promise<OpsTask[]> {
-  const contexts: AsanaTaskWithContext[] = [];
   const today = todayISO();
   const includeOld = options.includeOld === true;
   const modifiedSince = includeOld ? undefined : `${opsConfig.recentCreatedSince(today)}T00:00:00Z`;
 
-  // Isolate per-project failures: one bad project (revoked access, deleted gid,
-  // 404, etc.) must not abort the rest of the sync. Logged with the gid so the
-  // operator can fix the offending entry and re-sync.
-  for (const projectGid of config.projectGids) {
+  // Phase 1: fetch every project's task list in PARALLEL (was sequential — the
+  // dominant cost). Per-project failures are isolated so one bad project (revoked
+  // access, deleted gid, 404) doesn't abort the rest of the sync.
+  const perProjectRefs = await mapWithConcurrency(config.projectGids, projectFetchConcurrency, async (projectGid) => {
     try {
       const projectTasks = await fetchProjectTasks(projectGid, config, { modifiedSince });
       const projectName = config.projectNames[projectGid] ?? inferProjectName(projectTasks, projectGid);
-      const eligibleTasks = projectTasks.filter((task) => isTaskWorthStoryFetch(task, today, config.syncLookbackDays, includeOld));
-
-      const projectContexts = await mapWithConcurrency(eligibleTasks, storyFetchConcurrency, async (task) => ({
-        task,
-        projectGid,
-        projectName,
-        stories: await fetchTaskStories(task.gid, config),
-      }));
-
-      contexts.push(...projectContexts);
+      return projectTasks
+        .filter((task) => isTaskWorthStoryFetch(task, today, config.syncLookbackDays, includeOld))
+        .map((task) => ({ task, projectGid, projectName } satisfies TaskRef));
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       console.warn(`fetchOpsTasks: project ${projectGid} failed, continuing with remaining projects:`, message);
+      return [] as TaskRef[];
     }
-  }
+  });
+
+  // Phase 2: fetch stories for ALL eligible tasks through a single shared pool.
+  // Previously the pool was rebuilt per project, so a project with 1 task wasted
+  // 9 of 10 slots; flattening keeps the pool saturated across the whole run.
+  const taskRefs = perProjectRefs.flat();
+  const contexts: AsanaTaskWithContext[] = await mapWithConcurrency(taskRefs, storyFetchConcurrency, async (ref) => ({
+    task: ref.task,
+    projectGid: ref.projectGid,
+    projectName: ref.projectName,
+    stories: await fetchTaskStories(ref.task.gid, config),
+  }));
 
   return normalizeAsanaTasks(contexts, config, today, { includeOld });
 }

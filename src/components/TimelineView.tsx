@@ -16,6 +16,16 @@ export function TimelineView({ tasks }: { tasks: DerivedTask[] }) {
   const days = useMemo(() => Array.from({ length: range.totalDays }, (_, index) => addDays(range.start, index)), [range.start, range.totalDays]);
   const groups = groupTasks(tasks, groupKey);
   const groupNames = Object.keys(groups).sort((a, b) => a.localeCompare(b));
+
+  // Pre-sort each group once and assign a running global row index, so the label
+  // column and the grid column share the same zebra striping and stay aligned.
+  let runningRow = 0;
+  const orderedGroups = groupNames.map((name) => {
+    const groupTasks = sortTasks(groups[name], {});
+    const startRow = runningRow;
+    runningRow += groupTasks.length;
+    return { name, groupTasks, startRow };
+  });
   const headerRef = useRef<HTMLDivElement>(null);
   const bodyRef = useRef<HTMLDivElement>(null);
   const labelRef = useRef<HTMLDivElement>(null);
@@ -72,14 +82,14 @@ export function TimelineView({ tasks }: { tasks: DerivedTask[] }) {
         </div>
 
         <div className="timeline-left timeline-rows" ref={labelRef}>
-          {groupNames.map((group) => (
-            <div key={group}>
-              <div className="timeline-group-row">{group}<span>{groups[group].length}</span></div>
-              {sortTasks(groups[group], {}).map((task) => (
-                <div className="timeline-task-label" key={task.id}>
+          {orderedGroups.map(({ name, groupTasks, startRow }) => (
+            <div key={name}>
+              <div className="timeline-group-row">{name}<span>{groupTasks.length}</span></div>
+              {groupTasks.map((task, i) => (
+                <div className={`timeline-task-label ${(startRow + i) % 2 ? "row-odd" : "row-even"}`} key={task.id}>
                   <span className={`task-dot ${phaseClass(task.currentPhase)}`} />
-                  <span>{task.title}</span>
-                  {task.qaReworkCount > 0 && <strong>{task.qaReworkCount}x</strong>}
+                  <span className="timeline-task-name">{task.title}</span>
+                  {task.qaReworkCount > 0 && <strong title="QA bounces">{task.qaReworkCount}×</strong>}
                 </div>
               ))}
             </div>
@@ -93,11 +103,11 @@ export function TimelineView({ tasks }: { tasks: DerivedTask[] }) {
                 <div className={`timeline-bg-day ${day === today ? "today-line" : ""} ${isWeekend(day) ? "weekend" : ""}`} style={{ left: index * dayWidth }} key={day} />
               ))}
             </div>
-            {groupNames.map((group) => (
-              <div key={group}>
+            {orderedGroups.map(({ name, groupTasks, startRow }) => (
+              <div key={name}>
                 <div className="timeline-group-bar" />
-                {sortTasks(groups[group], {}).map((task) => (
-                  <div className="timeline-task-row" key={task.id}>
+                {groupTasks.map((task, i) => (
+                  <div className={`timeline-task-row ${(startRow + i) % 2 ? "row-odd" : "row-even"}`} key={task.id}>
                     {task.phases.map((phase, index) => {
                       const phaseEnd = phase.end ?? today;
                       const clampStart = phase.start < range.start ? range.start : phase.start;
@@ -113,7 +123,7 @@ export function TimelineView({ tasks }: { tasks: DerivedTask[] }) {
                           title={`${task.title}: ${phaseLabel(phase.type)} ${formatShort(phase.start)} - ${phase.end ? formatShort(phase.end) : "ongoing"}`}
                           key={`${task.id}-${phase.type}-${phase.start}-${index}`}
                         >
-                          {width > 92 ? phaseLabel(phase.type) : ""}
+                          {width > 70 ? phaseLabel(phase.type) : ""}
                         </div>
                       );
                     })}

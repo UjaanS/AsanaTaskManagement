@@ -209,27 +209,31 @@ function buildConfig(session: SessionPayload, includeOld: boolean): AsanaSession
 
 async function fetchAsanaTasks(config: AsanaSessionConfig): Promise<Array<{ task: AsanaTask; projectGid: string; projectName: string }>> {
   const projects = await resolveProjects(config);
-  const contexts: Array<{ task: AsanaTask; projectGid: string; projectName: string }> = [];
   // Asana supports modified_since (ISO 8601) on /projects/{gid}/tasks. Use it to
   // bound wire volume in the default window — newly-created tasks satisfy it
   // because modified_at == created_at at creation time.
   const modifiedSince = config.includeOld ? "" : `&modified_since=${encodeURIComponent(`${monthsAgoISO(RECENT_TASK_MONTHS)}T00:00:00Z`)}`;
 
-  for (const project of projects) {
-    try {
-      const tasks = await fetchAll<AsanaTask>(
-        `/projects/${encodeURIComponent(project.gid)}/tasks?limit=100&opt_fields=${encodeURIComponent(taskFields)}${modifiedSince}`,
-        config.pat,
-      );
-      const projectName = config.projectNames[project.gid] ?? project.name;
-      tasks.forEach((task) => contexts.push({ task, projectGid: project.gid, projectName }));
-    } catch (error) {
-      // Isolate per-project failures so one bad project doesn't abort the rest.
-      console.warn(`api/ops/tasks project ${project.gid} fetch failed`, safeErrorLog(error));
-    }
-  }
+  // Fetch every project's task list in PARALLEL — each call is ~0.5s of network
+  // latency, so a sequential loop over N projects is the dominant cost. Failures
+  // are isolated per project so one bad gid doesn't abort the rest.
+  const perProject = await Promise.all(
+    projects.map(async (project) => {
+      try {
+        const tasks = await fetchAll<AsanaTask>(
+          `/projects/${encodeURIComponent(project.gid)}/tasks?limit=100&opt_fields=${encodeURIComponent(taskFields)}${modifiedSince}`,
+          config.pat,
+        );
+        const projectName = config.projectNames[project.gid] ?? project.name;
+        return tasks.map((task) => ({ task, projectGid: project.gid, projectName }));
+      } catch (error) {
+        console.warn(`api/ops/tasks project ${project.gid} fetch failed`, safeErrorLog(error));
+        return [] as Array<{ task: AsanaTask; projectGid: string; projectName: string }>;
+      }
+    }),
+  );
 
-  return contexts;
+  return perProject.flat();
 }
 
 async function resolveProjects(config: AsanaSessionConfig): Promise<AsanaProject[]> {
