@@ -1519,7 +1519,27 @@ select {
 .assignee-dashboard-wrapper {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 10px;
+}
+
+/* Toolbar above the cards: people count + bulk expand/collapse. */
+.assignee-toolbar {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+  padding: 0 2px;
+}
+
+.assignee-toolbar-label {
+  color: var(--faint);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.assignee-toolbar-actions {
+  display: flex;
+  gap: 6px;
 }
 
 .assignee-card {
@@ -1534,13 +1554,17 @@ select {
   border-color: var(--border-med);
 }
 
-.assignee-card.card-unassigned {
-  border-color: var(--red);
-  border-width: 2px;
-}
+/* Per-person health accent — a quiet left rail so the eye can scan red→amber→green
+   without reading the chips. Inset so the card border/radius stay uniform. */
+.card-health-red { box-shadow: inset 3px 0 0 var(--red); }
+.card-health-amber { box-shadow: inset 3px 0 0 var(--amber); }
+.card-health-green { box-shadow: inset 3px 0 0 color-mix(in srgb, var(--green), transparent 40%); }
 
-.assignee-card.card-has-overdue {
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--red), transparent 60%);
+/* Unassigned: calm, not alarming — a dashed neutral border. It still turns red
+   via the health accent whenever it holds owner-less / overdue work. */
+.assignee-card.card-unassigned {
+  border-style: dashed;
+  border-color: var(--border-med);
 }
 
 .card-header {
@@ -1550,7 +1574,7 @@ select {
   cursor: pointer;
   display: flex;
   gap: 12px;
-  padding: 14px 16px;
+  padding: 10px 14px;
 }
 
 .card-header:hover {
@@ -1714,7 +1738,7 @@ select {
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
-  padding: 10px 16px;
+  padding: 8px 14px;
   transition: background 0.1s ease;
 }
 

@@ -1,8 +1,13 @@
 import type { AttentionFlag, DerivedTask } from "../types/ops";
 import { addDays, formatShort, toDate, todayISO } from "./date";
+import { riskRank } from "./derive";
 import { groupTasks, sortTasks } from "./grouping";
 import { opsConfig } from "./opsConfig";
 import { flagLabels, phaseLabel } from "./theme";
+
+// Re-exported for back-compat: riskRank now lives in derive.ts (grouping.ts needs
+// it too, and grouping can't import from summary without a cycle).
+export { riskRank };
 
 export interface EodItem {
   id: string;
@@ -27,15 +32,6 @@ export interface EodReport {
   risk: { overdue: number; qaRejections: number; needsReview: number; blocked: number };
   totals: { active: number; inQa: number };
   groups: EodGroup[];
-}
-
-// Lower rank = more urgent = surfaced first. Founders care about what's on fire,
-// so this drives both the on-screen ordering and the copied WhatsApp text.
-export function riskRank(task: DerivedTask): number {
-  if (task.etaStatus === "overdue") return 0;
-  if (task.qaReworkCount > 0) return 1;
-  if (opsConfig.isOnHold(task.currentPhase)) return 2;
-  return 3;
 }
 
 function toItem(task: DerivedTask): EodItem {
