@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { groupTasks, sortTasks } from "../lib/ops";
+import { groupTasks, sortTasksByRisk } from "../lib/ops";
 import { opsConfig } from "../lib/opsConfig";
 import { avatarColor, initials, phaseClass, phaseDotClass, phaseLabel } from "../lib/theme";
 import { formatShort } from "../lib/date";
@@ -12,16 +12,50 @@ interface AssigneeDashboardProps {
   onOrderChange: (order: Record<string, number>) => void;
 }
 
+type Health = "red" | "amber" | "green";
+
+interface GroupSummary {
+  name: string;
+  isUnassigned: boolean;
+  tasks: DerivedTask[];
+  activeCount: number;
+  counts: { blocked: number; stale: number; qaFailed: number; eta: number };
+  hasAttention: boolean;
+  health: Health;
+}
+
 export function AssigneeDashboard({ tasks, order, onOrderChange }: AssigneeDashboardProps) {
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null);
 
   const groups = useMemo(() => groupTasks(tasks, "assignee"), [tasks]);
-  const groupNames = Object.keys(groups).sort((a, b) => (a === "Unassigned" ? -1 : b === "Unassigned" ? 1 : a.localeCompare(b)));
+
+  // Build a summary per assignee, then order cards by workload (most active
+  // tasks first). Tasks within each card are risk-ordered (overdue/QA/blocked
+  // first) while still honouring any manual drag order.
+  const orderedGroups = useMemo<GroupSummary[]>(() => {
+    return Object.keys(groups)
+      .map((name) => {
+        const groupTasks = sortTasksByRisk(groups[name], order);
+        const counts = {
+          blocked: groupTasks.filter((task) => opsConfig.isOnHold(task.currentPhase)).length,
+          stale: groupTasks.filter((task) => task.attentionFlags.includes("silent_work") || task.attentionFlags.includes("high_priority_stale")).length,
+          qaFailed: groupTasks.reduce((sum, task) => sum + task.qaReworkCount, 0),
+          eta: groupTasks.filter((task) => task.etaStatus === "overdue").length,
+        };
+        const activeCount = groupTasks.filter((task) => !opsConfig.isClosed(task.currentPhase) && !task.completedAt).length;
+        const anyFlag = groupTasks.some((task) => task.attentionFlags.length > 0);
+        const hasAttention = counts.eta > 0 || counts.qaFailed > 0 || counts.blocked > 0 || counts.stale > 0 || anyFlag;
+        const health: Health =
+          counts.eta > 0 || counts.qaFailed > 0 || counts.blocked > 0 ? "red" : counts.stale > 0 || anyFlag ? "amber" : "green";
+        return { name, isUnassigned: name === "Unassigned", tasks: groupTasks, activeCount, counts, hasAttention, health };
+      })
+      .sort((a, b) => b.activeCount - a.activeCount || a.name.localeCompare(b.name));
+  }, [groups, order]);
 
   const moveTask = (targetTaskId: string, group: string) => {
     if (!draggedTaskId || draggedTaskId === targetTaskId) return;
-    const sorted = sortTasks(groups[group], order);
+    const sorted = sortTasksByRisk(groups[group], order);
     const from = sorted.findIndex((task) => task.id === draggedTaskId);
     const to = sorted.findIndex((task) => task.id === targetTaskId);
     if (from < 0 || to < 0) return;
@@ -39,27 +73,33 @@ export function AssigneeDashboard({ tasks, order, onOrderChange }: AssigneeDashb
     setCollapsed((value) => ({ ...value, [group]: !value[group] }));
   };
 
+  const setAll = (value: boolean) => {
+    setCollapsed(Object.fromEntries(orderedGroups.map((g) => [g.name, value])));
+  };
+
   return (
     <div className="assignee-dashboard-wrapper">
+      {orderedGroups.length > 0 && (
+        <div className="assignee-toolbar">
+          <span className="assignee-toolbar-label">{orderedGroups.length} {orderedGroups.length === 1 ? "person" : "people"}</span>
+          <div className="assignee-toolbar-actions">
+            <button type="button" className="button" onClick={() => setAll(false)}>Expand all</button>
+            <button type="button" className="button" onClick={() => setAll(true)}>Collapse all</button>
+          </div>
+        </div>
+      )}
       <section className="assignee-dashboard">
-        {groupNames.length === 0 ? (
+        {orderedGroups.length === 0 ? (
           <EmptyDashboard />
         ) : (
-          groupNames.map((group) => {
-            const groupTasks = sortTasks(groups[group], order);
-            const isCollapsed = collapsed[group];
-            const isUnassigned = group === "Unassigned";
+          orderedGroups.map(({ name: group, isUnassigned, tasks: groupTasks, counts, hasAttention, health }) => {
+            // Calm people (no attention) start collapsed; a manual toggle overrides.
+            const isCollapsed = collapsed[group] ?? !hasAttention;
             const color = avatarColor(group);
-            const counts = {
-              blocked: groupTasks.filter((task) => opsConfig.isOnHold(task.currentPhase)).length,
-              stale: groupTasks.filter((task) => task.attentionFlags.includes("silent_work") || task.attentionFlags.includes("high_priority_stale")).length,
-              qaFailed: groupTasks.reduce((sum, task) => sum + task.qaReworkCount, 0),
-              eta: groupTasks.filter((task) => task.etaStatus === "overdue").length,
-            };
 
             return (
               <article
-                className={`assignee-card ${isUnassigned ? "card-unassigned" : ""} ${counts.eta > 0 ? "card-has-overdue" : ""}`}
+                className={`assignee-card card-health-${health} ${isUnassigned ? "card-unassigned" : ""}`}
                 key={group}
               >
                 <header
